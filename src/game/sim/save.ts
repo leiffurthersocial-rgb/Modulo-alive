@@ -33,6 +33,7 @@ interface SavePayload {
   height: number;
   terrain: number[];
   nodes: ResourceNode[];
+  animals: World['animals'];
   buildings: Building[];
   characters: Character[];
   jobs: Job[];
@@ -45,6 +46,7 @@ interface SavePayload {
   progression: World['progression'];
   campCenter: World['campCenter'];
   nextNodeId: number;
+  nextAnimalId: number;
   nextBuildingId: number;
   nextJobId: number;
   nextLogId: number;
@@ -63,6 +65,7 @@ export function serialize(w: World): SavePayload {
     height: w.height,
     terrain: rle(w.terrain),
     nodes: Array.from(w.nodes.values()),
+    animals: w.animals,
     buildings: Array.from(w.buildings.values()),
     characters: w.characters,
     jobs: Array.from(w.jobs.values()),
@@ -75,6 +78,7 @@ export function serialize(w: World): SavePayload {
     progression: w.progression,
     campCenter: w.campCenter,
     nextNodeId: w.nextNodeId,
+    nextAnimalId: w.nextAnimalId,
     nextBuildingId: w.nextBuildingId,
     nextJobId: w.nextJobId,
     nextLogId: w.nextLogId,
@@ -112,6 +116,7 @@ export function deserialize(raw: any): World {
     blocked: new Uint8Array(n),
     nodes: new Map(),
     buildings: new Map(),
+    animals: data.animals ?? [],
     characters: data.characters,
     jobs: new Map(),
     sites: data.sites,
@@ -123,6 +128,7 @@ export function deserialize(raw: any): World {
     progression: data.progression,
     campCenter: data.campCenter,
     nextNodeId: data.nextNodeId,
+    nextAnimalId: data.nextAnimalId ?? 1,
     nextBuildingId: data.nextBuildingId,
     nextJobId: data.nextJobId,
     nextLogId: data.nextLogId,
@@ -137,7 +143,7 @@ export function deserialize(raw: any): World {
       growth: 0,
       autosave: 0,
     },
-    stats: data.stats,
+    stats: Object.assign({ animalsHunted: 0 }, data.stats),
   };
 
   for (const node of data.nodes) {

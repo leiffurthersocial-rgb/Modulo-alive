@@ -10,6 +10,7 @@ import { eventTick } from './events';
 import { checkMortality } from './medical';
 import { checkProgression } from './progression';
 import { removeNode } from './world';
+import { repopulateWildlife, updateWildlife } from './wildlife';
 import type { Ctx } from './context';
 
 /** Fixed simulation step, in sim-seconds. */
@@ -56,6 +57,9 @@ export function stepWorld(w: World, dt: number, ctx: Ctx) {
     if (b.activeT > 0) b.activeT = Math.max(0, b.activeT - dt);
   }
 
+  /* -------- wildlife -------- */
+  updateWildlife(w, dt, ctx.fx);
+
   /* -------- characters -------- */
   ctx.coverage = workCoverage(w);
   for (const c of w.characters) {
@@ -94,6 +98,7 @@ export function stepWorld(w: World, dt: number, ctx: Ctx) {
   w.acc.events += dt;
   if (w.acc.events >= EVENT_INTERVAL) {
     eventTick(w, ctx.fx);
+    repopulateWildlife(w);
     checkMortality(w, ctx.fx);
     checkProgression(w);
     tidyDead(w);
@@ -121,6 +126,9 @@ function pruneJobs(w: World) {
         else if (j.type === 'plant' && cell.crop) valid = false;
         else if (j.type === 'till' && cell.tilled) valid = false;
       }
+    } else if (j.targetKind === 'animal') {
+      const a = w.animals.find((x) => x.id === j.targetId);
+      if (!a || a.state === 'dead') valid = false;
     } else if (j.targetKind === 'character') {
       const c = w.characters.find((x) => x.id === j.targetId);
       if (!c || !c.alive) valid = false;

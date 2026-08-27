@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getEngine } from '@/store/engineStore';
 import { AUTOSAVE_SLOT, SLOTS, deleteSave, listSaves, type SaveMeta } from '@/game/sim/save';
 
@@ -26,7 +26,10 @@ export default function MainMenu({
 }) {
   const engine = getEngine();
   const [saves, setSaves] = useState<SaveMeta[]>([]);
-  const [view, setView] = useState<'main' | 'load' | 'save' | 'help' | 'settings'>('main');
+  const [view, setView] = useState<
+    'main' | 'load' | 'save' | 'help' | 'settings' | 'debug'
+  >('main');
+  const taps = useRef<number[]>([]);
   const [, force] = useState(0);
   const rerender = () => force((n) => n + 1);
 
@@ -38,7 +41,21 @@ export default function MainMenu({
   return (
     <div className={`menu-overlay ${mode === 'title' ? 'title-mode' : ''}`}>
       <div className="menu-card">
-        <div className="menu-brand">
+        <div
+          className="menu-brand"
+          onPointerDown={() => {
+            // Triple-tap the logo to reveal the debug tools.
+            const now = Date.now();
+            taps.current = [...taps.current.filter((t) => now - t < 700), now];
+            if (taps.current.length >= 3) {
+              taps.current = [];
+              engine.setDebug(!engine.debug);
+              rerender();
+              if (!engine.debug) setView('main');
+            }
+          }}
+          title=""
+        >
           <h1>
             Modulo<span>:Alive</span>
           </h1>
@@ -92,6 +109,11 @@ export default function MainMenu({
             <button className="btn" onClick={() => setView('help')}>
               How to Play
             </button>
+            {engine.debug && (
+              <button className="btn btn-debug" onClick={() => setView('debug')}>
+                Debug Tools
+              </button>
+            )}
           </div>
         )}
 
@@ -156,6 +178,96 @@ export default function MainMenu({
                 </div>
               );
             })}
+            <button className="btn" onClick={() => setView('main')}>
+              Back
+            </button>
+          </div>
+        )}
+
+        {view === 'debug' && (
+          <div className="menu-settings menu-debug">
+            <h3>Debug Tools</h3>
+            <p className="hint">
+              Triple-tap the logo again to hide these. Fast-forward speeds (8× and 20×) are added
+              to the speed controls while debug is on.
+            </p>
+
+            <h4>Time</h4>
+            <div className="debug-grid">
+              <button className="btn" onClick={() => { engine.debugSkipHours(1); onClose(); }}>
+                +1 hour
+              </button>
+              <button className="btn" onClick={() => { engine.debugSkipHours(6); onClose(); }}>
+                +6 hours
+              </button>
+              <button className="btn" onClick={() => { engine.debugSkipHours(24); onClose(); }}>
+                +1 day
+              </button>
+              <button className="btn" onClick={() => { engine.debugSetTime(8); onClose(); }}>
+                Set 08:00
+              </button>
+              <button className="btn" onClick={() => { engine.debugSetTime(13); onClose(); }}>
+                Set 13:00
+              </button>
+              <button className="btn" onClick={() => { engine.debugSetTime(22); onClose(); }}>
+                Set 22:00
+              </button>
+            </div>
+
+            <h4>Events</h4>
+            <div className="debug-grid">
+              <button className="btn" onClick={() => { engine.debugTriggerEvent(); onClose(); }}>
+                Trigger event
+              </button>
+              <button className="btn" onClick={() => { engine.debugInjureSelected(); onClose(); }}>
+                Injure selected
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={() => { engine.debugKillSelected(); onClose(); }}
+              >
+                Kill selected
+              </button>
+            </div>
+
+            <h4>Weather</h4>
+            <div className="debug-grid">
+              {(['clear', 'overcast', 'rain', 'fog'] as const).map((k) => (
+                <button key={k} className="btn" onClick={() => { engine.debugSetWeather(k); onClose(); }}>
+                  {k[0].toUpperCase() + k.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            <h4>Settlement</h4>
+            <div className="debug-grid">
+              <button className="btn" onClick={() => { engine.debugAddResources(250); onClose(); }}>
+                +250 resources
+              </button>
+              <button className="btn" onClick={() => { engine.debugFillNeeds(); onClose(); }}>
+                Restore everyone
+              </button>
+              <button className="btn" onClick={() => { engine.debugUnlockAll(); onClose(); }}>
+                Unlock all builds
+              </button>
+              <button className="btn" onClick={() => { engine.debugCompleteBlueprints(); onClose(); }}>
+                Finish blueprints
+              </button>
+              <button className="btn" onClick={() => { engine.debugClearForest(16); onClose(); }}>
+                Clear forest near camp
+              </button>
+              <button className="btn" onClick={() => { engine.debugRevealMap(); onClose(); }}>
+                Reveal all sites
+              </button>
+            </div>
+
+            <h4>Wildlife</h4>
+            <div className="debug-grid">
+              <button className="btn" onClick={() => { engine.debugSpawnAnimals(6); onClose(); }}>
+                Spawn animals
+              </button>
+            </div>
+
             <button className="btn" onClick={() => setView('main')}>
               Back
             </button>
@@ -288,12 +400,18 @@ export default function MainMenu({
                 orders. Wheel zooms, middle-drag pans, WASD or arrows move the view.
               </li>
               <li>
-                <b>Space</b> pauses; <b>1–4</b> set pause / 1× / 2× / 4×. <b>B</b> opens the build
-                menu, <b>F</b> follows the selected survivor, <b>Tab</b> cycles survivors.
+                <b>Space</b> pauses; <b>1–4</b> set pause / 1× / 2× / 4×. <b>P</b> opens this
+                menu, <b>B</b> opens the build menu, <b>F</b> follows the selected survivor,
+                <b>Tab</b> cycles survivors.
               </li>
             </ul>
             <h4>Running the camp</h4>
             <ul>
+              <li>
+                <b>Hunting</b>: wildlife roams the forest. Order a survivor onto an animal to hunt
+                it — deer and rabbits bolt, boars turn and charge, so send someone who can take a
+                hit.
+              </li>
               <li>
                 <b>Clear</b> marks trees and rocks for removal. Cleared ground is the only place
                 you can build, so pushing the treeline back is how the settlement grows.

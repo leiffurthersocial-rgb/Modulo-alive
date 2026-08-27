@@ -59,6 +59,7 @@ export default function GameShell() {
         if (idle) setMenuOpen((m) => !m);
       }
       if (e.key.toLowerCase() === 'b') setBuildOpen((b) => !b);
+      if (e.key.toLowerCase() === 'p') setMenuOpen((m) => !m);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

@@ -1,5 +1,6 @@
 import { TILE, Terrain, type Appearance, type Equipment } from '../core/types';
 import { GEAR_MAP } from '../data/gear';
+import type { AnimalDef } from '../data/animals';
 import { RNG } from '../core/rng';
 
 /**
@@ -611,6 +612,84 @@ const OUTLINE_OFFSETS: [number, number][] = [
   [0, -1],
   [0, 1],
 ];
+
+/* ------------------------------------------------------------------ */
+/* Wildlife                                                            */
+/* ------------------------------------------------------------------ */
+
+export const ANIMAL_W = 26;
+export const ANIMAL_H = 22;
+export const ANIMAL_FRAMES = 3;
+
+/**
+ * Animals are drawn side-on for left/right and from behind/front for up/down,
+ * which reads clearly at a glance without needing much detail.
+ */
+export function buildAnimalSheet(def: AnimalDef): HTMLCanvasElement {
+  const c = makeCanvas(ANIMAL_W * ANIMAL_FRAMES, ANIMAL_H * 4);
+  const g = ctx2d(c);
+  const S = def.size;
+
+  for (let dir = 0; dir < 4; dir++) {
+    for (let f = 0; f < ANIMAL_FRAMES; f++) {
+      g.save();
+      g.translate(f * ANIMAL_W, dir * ANIMAL_H);
+      const cx = ANIMAL_W / 2;
+      const baseY = ANIMAL_H - 3;
+      const bodyW = Math.round(13 * S);
+      const bodyH = Math.round(8 * S);
+      const legLift = f === 1 ? 1 : f === 2 ? -1 : 0;
+      const sideOn = dir === 1 || dir === 2;
+      const face = dir === 1 ? -1 : 1;
+
+      // shadow
+      g.fillStyle = 'rgba(0,0,0,0.2)';
+      g.beginPath();
+      g.ellipse(cx, baseY + 1, bodyW * 0.5, 2.2, 0, 0, Math.PI * 2);
+      g.fill();
+
+      // legs
+      const legY = baseY - Math.round(4 * S);
+      px(g, cx - bodyW / 2 + 1, legY, 2, Math.round(5 * S) + legLift, def.detail);
+      px(g, cx + bodyW / 2 - 3, legY, 2, Math.round(5 * S) - legLift, def.detail);
+
+      // body
+      const bodyY = baseY - Math.round(4 * S) - bodyH;
+      px(g, cx - bodyW / 2, bodyY, bodyW, bodyH, def.body);
+      px(g, cx - bodyW / 2, bodyY + bodyH - 2, bodyW, 2, def.belly);
+
+      // head
+      const headW = Math.round(6 * S);
+      const headH = Math.round(5 * S);
+      const headX = sideOn ? cx + face * (bodyW / 2 - 1) : cx - headW / 2;
+      const headY = sideOn ? bodyY - 1 : dir === 3 ? bodyY - headH + 2 : bodyY + 1;
+      px(g, sideOn ? headX - (face < 0 ? headW : 0) : headX, headY, headW, headH, def.body);
+
+      if (def.kind === 'deer') {
+        // antlers
+        const ax = sideOn ? headX + (face < 0 ? -headW : 0) + 1 : cx - 3;
+        px(g, ax, headY - 4, 1, 4, def.detail);
+        px(g, ax + 4, headY - 4, 1, 4, def.detail);
+        px(g, ax - 1, headY - 5, 2, 1, def.detail);
+        px(g, ax + 4, headY - 5, 2, 1, def.detail);
+      } else if (def.kind === 'boar') {
+        // tusks
+        const tx = sideOn ? headX + (face < 0 ? -headW - 1 : headW - 1) : cx - 2;
+        px(g, tx, headY + headH - 2, 2, 1, '#e8e2cf');
+      } else {
+        // rabbit ears
+        const ex = sideOn ? headX + (face < 0 ? -headW + 1 : 1) : cx - 2;
+        px(g, ex, headY - 4, 1, 4, def.body);
+        px(g, ex + 3, headY - 4, 1, 4, def.body);
+      }
+
+      // tail
+      if (sideOn) px(g, cx - face * (bodyW / 2), bodyY + 1, 2, 2, def.belly);
+      g.restore();
+    }
+  }
+  return c;
+}
 
 /* ------------------------------------------------------------------ */
 /* Small icons used by the world layer                                 */

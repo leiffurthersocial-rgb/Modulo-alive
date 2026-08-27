@@ -31,6 +31,7 @@ server-side state and no filesystem persistence.
 | `WASD` / arrows | Pan. Mouse wheel zooms, middle-drag drags the view. |
 | `F` | Follow the selected survivor. `Tab` cycles survivors. |
 | `Esc` | Cancel the current tool, then open the menu. |
+| `P` | Open/close the pause menu. |
 
 On a tablet everything is reachable by touch: drag to pan, pinch to zoom, tap to
 select, and the **Order** button (or a long press) to command the selection.
@@ -56,6 +57,7 @@ src/
       ai           priority-based autonomous behaviour
       jobs/tasks   the work queue and the work itself
       needs        hunger, energy, morale, stress, health
+      wildlife     roaming animals, and hunting them
       movement     path following and separation
       farming, construction (in tasks), exploration, medical
       relationships, events, progression
@@ -108,6 +110,15 @@ A few things were built to be replaced rather than rewritten:
   Traits are still rolled; fill in `fixedTraits` on a template to pin those too.
 - **New gear.** `data/gear.ts` is the single source for equipment: adding an entry
   makes it craftable at the workbench, wearable, and drawn on the sprite.
+- **New wildlife.** `data/animals.ts` defines each species' speed, temperament and
+  yields; adding one puts it in the forest, on the minimap and in the hunt.
+
+## Debug tools
+
+Triple-tap the logo in the title or pause menu to unlock a hidden debug panel:
+skip time, force events and weather, restore or kill survivors, unlock every
+structure, finish blueprints, clear the forest, restock wildlife. It also adds
+8× and 20× to the speed controls. Triple-tap again to hide it.
 - **Seasons.** `sim/time.ts` already derives day, week, season and year from the
   clock, and every crop carries `plantSeasons` and `seasonYield`. The seasonal yield
   multiplier is live; strict seasonal planting is a condition in `jobs.ts`.

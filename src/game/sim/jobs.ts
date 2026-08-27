@@ -12,6 +12,7 @@ import {
 import { WORK_SKILL, WORK_TYPES } from '../core/types';
 import { buildingDef } from '../data/buildings';
 import { CROP_MAP, CROPS } from '../data/crops';
+import { ANIMAL_MAP } from '../data/animals';
 import { RECIPES } from '../data/recipes';
 import {
   NODE_SPEC,
@@ -31,6 +32,7 @@ export const JOB_WORK: Record<JobType, WorkType> = {
   chop: 'woodcutting',
   mine: 'mining',
   forage: 'foraging',
+  hunt: 'hunting',
   gatherWater: 'hauling',
   haulToSite: 'hauling',
   build: 'construction',
@@ -49,6 +51,7 @@ export const JOB_LABEL: Record<JobType, string> = {
   chop: 'Cutting wood',
   mine: 'Mining stone',
   forage: 'Foraging',
+  hunt: 'Hunting',
   gatherWater: 'Fetching water',
   haulToSite: 'Hauling materials',
   build: 'Building',
@@ -219,6 +222,46 @@ export function generateJobs(w: World, autoGather = true) {
     });
     index.add(type, n.id);
     if (w.jobs.size >= MAX_JOBS) return;
+  }
+
+  /* --- Wildlife the player has marked, plus hunting when meat is needed --- */
+  for (const a of w.animals) {
+    if (a.state === 'dead' || !a.marked) continue;
+    if (index.has('hunt', a.id)) continue;
+    index.add('hunt', a.id);
+    createJob(w, 'hunt', {
+      targetKind: 'animal',
+      targetId: a.id,
+      tx: Math.floor(a.x / TILE),
+      ty: Math.floor(a.y / TILE),
+      priority: 70,
+    });
+    if (w.jobs.size >= MAX_JOBS) return;
+  }
+  if (autoGather && food < pop * 10 && jobCount(w, 'hunt') < 2) {
+    // The nearest animal to the camp that nobody is already after.
+    let best = null as (typeof w.animals)[number] | null;
+    let bestD = Infinity;
+    const cx = tileToWorldX(w.campCenter.tx);
+    const cy = tileToWorldY(w.campCenter.ty);
+    for (const a of w.animals) {
+      if (a.state === 'dead' || index.has('hunt', a.id)) continue;
+      const d = (a.x - cx) ** 2 + (a.y - cy) ** 2;
+      if (d < bestD && d < (46 * TILE) ** 2) {
+        bestD = d;
+        best = a;
+      }
+    }
+    if (best) {
+      index.add('hunt', best.id);
+      createJob(w, 'hunt', {
+        targetKind: 'animal',
+        targetId: best.id,
+        tx: Math.floor(best.x / TILE),
+        ty: Math.floor(best.y / TILE),
+        priority: food < pop * 5 ? 84 : 50,
+      });
+    }
   }
 
   /* --- Construction sites --- */
@@ -675,6 +718,10 @@ export function describeJob(w: World, j: Job): string {
       if (j.type === 'repair') return `Repairing ${label}`;
       return `Building ${label}`;
     }
+  }
+  if (j.type === 'hunt') {
+    const a = w.animals.find((x) => x.id === j.targetId);
+    return a ? `Hunting — ${ANIMAL_MAP[a.kind].label}` : 'Hunting';
   }
   if (j.type === 'chop' || j.type === 'mine' || j.type === 'forage') {
     const n = w.nodes.get(j.targetId);

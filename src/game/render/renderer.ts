@@ -1,11 +1,13 @@
 import {
   TILE,
   Terrain,
+  type Animal,
   type Building,
   type Character,
   type ResourceNode,
   type World,
 } from '../core/types';
+import { ANIMALS, ANIMAL_MAP } from '../data/animals';
 import { buildingDef } from '../data/buildings';
 import { daylight, hourOfDay } from '../sim/time';
 import { buildingCenterX, buildingCenterY, idx } from '../sim/world';
@@ -13,6 +15,10 @@ import type { Fx } from '../sim/fx';
 import { Camera } from './camera';
 import { drawBuilding } from './buildings';
 import {
+  ANIMAL_H,
+  ANIMAL_W,
+  ANIMAL_FRAMES,
+  buildAnimalSheet,
   CHAR_H,
   CHAR_W,
   buildBushSprites,
@@ -63,6 +69,7 @@ export class Renderer {
   private bushSprites: Record<string, { full: NodeSprite[]; empty: NodeSprite[] }> = {};
   private charSheets = new Map<string, HTMLCanvasElement>();
   private siteIcon!: HTMLCanvasElement;
+  private animalSheets = new Map<string, HTMLCanvasElement>();
   private chunks = new Map<number, HTMLCanvasElement>();
   private chunkStamp = -1;
   private lightCanvas: HTMLCanvasElement | null = null;
@@ -88,6 +95,7 @@ export class Renderer {
       this.bushSprites[k] = buildBushSprites(k);
     }
     this.siteIcon = buildSiteIcon();
+    for (const def of ANIMALS) this.animalSheets.set(def.kind, buildAnimalSheet(def));
   }
 
   /**
@@ -356,6 +364,12 @@ export class Renderer {
       list.push({ y: ny + 2, fn: () => this.drawNode(g, n, opts) });
     }
 
+    // Wildlife.
+    for (const a of w.animals) {
+      if (a.x < b.x0 || a.x > b.x1 || a.y < b.y0 || a.y > b.y1) continue;
+      list.push({ y: a.y, fn: () => this.drawAnimal(g, a) });
+    }
+
     // Characters (and bodies).
     for (const c of w.characters) {
       if (c.x < b.x0 || c.x > b.x1 || c.y < b.y0 || c.y > b.y1) continue;
@@ -428,6 +442,59 @@ export class Renderer {
     }
   }
 
+  private drawAnimal(g: CanvasRenderingContext2D, a: Animal) {
+    const sheet = this.animalSheets.get(a.kind);
+    if (!sheet) return;
+    const def = ANIMAL_MAP[a.kind];
+    const frame =
+      a.state === 'flee' || a.state === 'charge' || a.state === 'wander'
+        ? Math.floor(a.animT) % ANIMAL_FRAMES
+        : 0;
+
+    g.save();
+    g.translate(a.x, a.y);
+    if (a.state === 'dead') {
+      g.globalAlpha = 0.75;
+      g.rotate(Math.PI / 2);
+    }
+    g.drawImage(
+      sheet,
+      frame * ANIMAL_W,
+      a.dir * ANIMAL_H,
+      ANIMAL_W,
+      ANIMAL_H,
+      -ANIMAL_W / 2,
+      -ANIMAL_H + 4,
+      ANIMAL_W,
+      ANIMAL_H
+    );
+    g.restore();
+
+    if (a.state === 'dead') return;
+
+    if (a.hp < a.maxHp) {
+      const p = a.hp / a.maxHp;
+      g.fillStyle = 'rgba(0,0,0,0.45)';
+      g.fillRect(a.x - 9, a.y + 3, 18, 3);
+      g.fillStyle = '#e05f5f';
+      g.fillRect(a.x - 9, a.y + 3, 18 * p, 3);
+    }
+    if (a.marked) {
+      g.strokeStyle = '#ffcf5c';
+      g.lineWidth = 1.5;
+      g.setLineDash([3, 3]);
+      g.strokeRect(a.x - 11, a.y - 16, 22, 20);
+      g.setLineDash([]);
+    }
+    if (a.state === 'charge' && def.aggressive) {
+      g.fillStyle = '#e05f5f';
+      g.font = 'bold 11px sans-serif';
+      g.textAlign = 'center';
+      g.fillText('!', a.x, a.y - 18);
+      g.textAlign = 'left';
+    }
+  }
+
   private drawCharacter(
     g: CanvasRenderingContext2D,
     w: World,
@@ -481,8 +548,16 @@ export class Renderer {
     g.save();
     g.translate(c.x, c.y);
     if (sleeping) {
-      g.rotate(Math.PI / 2);
-      g.translate(0, 2);
+      // Lie along the bed, not across it. A tall bed means a tall sleeper;
+      // only a wide bed (or the bare ground) turns them sideways.
+      const bed = c.sleepBuildingId >= 0 ? w.buildings.get(c.sleepBuildingId) : null;
+      const alongX = bed ? bed.w > bed.h : true;
+      if (alongX) {
+        g.rotate(Math.PI / 2);
+        g.translate(0, 2);
+      } else {
+        g.translate(0, 5);
+      }
     }
     const bobY = c.moving ? 0 : Math.sin(c.bob) * 0.5;
     g.drawImage(
@@ -943,6 +1018,12 @@ export function renderMinimap(
     if (!s.discovered) continue;
     g.fillStyle = s.depleted ? 'rgba(255,255,255,0.3)' : '#ffffff';
     g.fillRect(s.tx * sx - 1, s.ty * sy - 1, 3, 3);
+  }
+
+  for (const a of w.animals) {
+    if (a.state === 'dead') continue;
+    g.fillStyle = a.kind === 'boar' ? '#c98a5c' : '#d8c49a';
+    g.fillRect((a.x / TILE) * sx - 0.5, (a.y / TILE) * sy - 0.5, 2, 2);
   }
 
   for (const c of w.characters) {

@@ -118,6 +118,39 @@ export interface ResourceNode {
 }
 
 /* ------------------------------------------------------------------ */
+/* Wildlife                                                            */
+/* ------------------------------------------------------------------ */
+
+export type AnimalKind = 'rabbit' | 'deer' | 'boar';
+
+export type AnimalState = 'graze' | 'wander' | 'flee' | 'charge' | 'dead';
+
+export interface Animal {
+  id: number;
+  kind: AnimalKind;
+  /** World pixel position. */
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  dir: 0 | 1 | 2 | 3;
+  animT: number;
+  state: AnimalState;
+  /** Current heading, in world pixels per second. */
+  vx: number;
+  vy: number;
+  /** Countdown to the next behaviour decision. */
+  timer: number;
+  /** Character this animal is charging at, or -1. */
+  targetId: number;
+  /** Player marked it for the hunt. */
+  marked: boolean;
+  /** Sim-time of death; the carcass lingers briefly. */
+  deadAt: number;
+  variant: number;
+}
+
+/* ------------------------------------------------------------------ */
 /* Buildings                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -258,6 +291,7 @@ export type WorkType =
   | 'construction'
   | 'hauling'
   | 'foraging'
+  | 'hunting'
   | 'mining'
   | 'farming'
   | 'cooking'
@@ -269,6 +303,7 @@ export const WORK_TYPES: WorkType[] = [
   'construction',
   'hauling',
   'foraging',
+  'hunting',
   'mining',
   'farming',
   'cooking',
@@ -281,6 +316,7 @@ export const WORK_LABEL: Record<WorkType, string> = {
   construction: 'Construction',
   hauling: 'Hauling',
   foraging: 'Foraging',
+  hunting: 'Hunting',
   mining: 'Mining',
   farming: 'Farming',
   cooking: 'Cooking',
@@ -294,6 +330,7 @@ export const WORK_SKILL: Record<WorkType, SkillId> = {
   construction: 'construction',
   hauling: 'construction',
   foraging: 'scavenging',
+  hunting: 'combat',
   mining: 'scavenging',
   farming: 'farming',
   cooking: 'cooking',
@@ -472,6 +509,7 @@ export type JobType =
   | 'chop'
   | 'mine'
   | 'forage'
+  | 'hunt'
   | 'gatherWater'
   | 'haulToSite'
   | 'build'
@@ -490,7 +528,7 @@ export interface Job {
   type: JobType;
   work: WorkType;
   /** Node / building / farm-cell / character the job acts on. */
-  targetKind: 'node' | 'building' | 'farmCell' | 'character' | 'tile';
+  targetKind: 'node' | 'building' | 'farmCell' | 'character' | 'tile' | 'animal';
   targetId: number;
   /** Index into building.farm for farm jobs. */
   cellIndex: number;
@@ -628,6 +666,7 @@ export interface World {
 
   nodes: Map<number, ResourceNode>;
   buildings: Map<number, Building>;
+  animals: Animal[];
   characters: Character[];
   jobs: Map<number, Job>;
   sites: ExplorationSite[];
@@ -644,6 +683,7 @@ export interface World {
   campCenter: { tx: number; ty: number };
 
   nextNodeId: number;
+  nextAnimalId: number;
   nextBuildingId: number;
   nextJobId: number;
   nextLogId: number;
@@ -671,5 +711,6 @@ export interface World {
     deaths: number;
     explorations: number;
     harvested: number;
+    animalsHunted: number;
   };
 }

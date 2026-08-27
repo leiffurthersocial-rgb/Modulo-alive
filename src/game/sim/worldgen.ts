@@ -19,6 +19,7 @@ import {
   tileToWorldY,
 } from './world';
 import { clamp } from '../core/util';
+import { populateWildlife } from './wildlife';
 
 export const WORLD_W = 112;
 export const WORLD_H = 86;
@@ -65,6 +66,7 @@ export function createWorld(seed = Math.floor(Math.random() * 0xffffffff)): Worl
     blocked: new Uint8Array(n),
     nodes: new Map(),
     buildings: new Map(),
+    animals: [],
     characters: [],
     jobs: new Map(),
     sites: [],
@@ -76,6 +78,7 @@ export function createWorld(seed = Math.floor(Math.random() * 0xffffffff)): Worl
     progression: { level: 1, wallsUnlocked: false },
     campCenter: { tx: Math.floor(width / 2), ty: Math.floor(height / 2) },
     nextNodeId: 1,
+    nextAnimalId: 1,
     nextBuildingId: 1,
     nextJobId: 1,
     nextLogId: 1,
@@ -90,6 +93,7 @@ export function createWorld(seed = Math.floor(Math.random() * 0xffffffff)): Worl
       deaths: 0,
       explorations: 0,
       harvested: 0,
+      animalsHunted: 0,
     },
   };
 
@@ -101,6 +105,7 @@ export function createWorld(seed = Math.floor(Math.random() * 0xffffffff)): Worl
   placeSites(w, rng);
   spawnSurvivors(w, rng);
   recomputeAllBlocked(w);
+  populateWildlife(w);
 
   w.stock.wood = 30;
   w.stock.stone = 12;

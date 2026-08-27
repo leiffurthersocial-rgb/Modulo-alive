@@ -29,6 +29,7 @@ import {
 import { addXp, carryCapacity, workSpeed, yieldMultiplier } from './modifiers';
 import { recipeAt } from './jobs';
 import { GEAR_MAP, GEAR_SLOTS } from '../data/gear';
+import { animalDef, findAnimal, killAnimal } from './wildlife';
 import type { Fx } from './fx';
 import { say } from './dialogue';
 import { adjustRelationship } from './relationships';
@@ -64,6 +65,10 @@ export function jobWorkAmount(w: World, j: Job): number {
       return 11;
     case 'harvest':
       return 10;
+    case 'hunt': {
+      const a = w.animals.find((x) => x.id === j.targetId);
+      return a ? a.maxHp : 1;
+    }
     case 'cook':
       return 16;
     case 'treat':
@@ -331,6 +336,45 @@ export function performWork(
         if (r.gear) w.gear[r.gear] = (w.gear[r.gear] ?? 0) + 1;
         fx.float((b.tx + b.w / 2) * TILE, b.ty * TILE, r.label, '#bcd7ff');
         addXp(c, 'crafting', 9);
+        return 'done';
+      }
+      return 'continue';
+    }
+
+    case 'hunt': {
+      const animal = findAnimal(w, j.targetId);
+      if (!animal) return 'fail';
+      const def = animalDef(animal);
+      // Damage scales with strength and combat skill; a tool helps.
+      const blow =
+        (2.4 + c.stats.strength * 0.55 + c.skills.combat.level * 0.9) *
+        (c.equipment.tool ? 1.25 : 1) *
+        dt *
+        2.2;
+      animal.hp -= blow;
+      c.workT += dt;
+      j.progress = 1 - Math.max(0, animal.hp) / animal.maxHp;
+      addXp(c, 'combat', dt * 2.2);
+      if (Math.floor(c.workT * 2) !== Math.floor((c.workT - dt) * 2)) {
+        fx.burst(animal.x, animal.y - 4, 3, '#c0392b', 'spark', 26, 0.5, 2);
+      }
+      // Being struck sends it running (or, for a boar, straight at the hunter).
+      if (animal.state !== 'charge') {
+        animal.state = def.aggressive ? 'charge' : 'flee';
+        animal.timer = 3;
+        animal.targetId = c.id;
+      }
+      if (animal.hp <= 0) {
+        killAnimal(w, animal, c, fx);
+        const mult = yieldMultiplier(c, 'hunting');
+        for (const res of Object.keys(def.yields) as ResourceType[]) {
+          const amount = Math.max(1, Math.round((def.yields[res] ?? 0) * mult));
+          if (res === 'rawFood') pickUp(w, c, res, amount, fx);
+          else addResource(w, res, amount);
+        }
+        addXp(c, 'combat', 16);
+        addXp(c, 'scavenging', 6);
+        say(w, c, 'hunt');
         return 'done';
       }
       return 'continue';

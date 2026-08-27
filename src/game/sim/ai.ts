@@ -45,6 +45,7 @@ import {
   siteById,
 } from './exploration';
 import { makeSick } from './medical';
+import { findAnimal } from './wildlife';
 import type { Ctx } from './context';
 import { GEAR, gearStockKey } from '../data/gear';
 
@@ -291,6 +292,47 @@ function actWork(w: World, c: Character, dt: number, ctx: Ctx) {
       say(w, c, 'hauling');
       return;
     }
+  }
+
+  // Prey moves, so a hunt re-aims at wherever the animal is now.
+  let goalX = j.tx;
+  let goalY = j.ty;
+  if (j.type === 'hunt') {
+    const animal = findAnimal(w, j.targetId);
+    if (!animal) {
+      releaseJob(w, c, 2);
+      c.activity = 'idle';
+      return;
+    }
+    goalX = Math.floor(animal.x / TILE);
+    goalY = Math.floor(animal.y / TILE);
+    const dx = animal.x - c.x;
+    const dy = animal.y - c.y;
+    if (Math.hypot(dx, dy) > TILE * 1.5) {
+      c.state = 'moving';
+      // Repath often; the target will not stay put.
+      if (c.repathT <= 0) clearPath(c);
+      moveToward(w, c, goalX, goalY, dt, ctx, () => {
+        releaseJob(w, c, 10);
+        c.activity = 'idle';
+      });
+      return;
+    }
+    c.state = 'working';
+    c.moving = false;
+    faceTile(c, goalX, goalY);
+    const res = performWork(w, c, j, dt, ctx.fx);
+    if (res === 'done') {
+      finishJob(w, c);
+      if (c.order && c.order.kind === 'work') c.order = null;
+      c.activity = c.carrying ? 'store' : 'idle';
+      c.thinkT = 0;
+    } else if (res === 'fail') {
+      releaseJob(w, c, 6);
+      c.activity = 'idle';
+      c.thinkT = 0;
+    }
+    return;
   }
 
   if (!isNear(c, j.tx, j.ty, 1.45)) {
@@ -542,7 +584,7 @@ function actSleep(w: World, c: Character, dt: number, ctx: Ctx) {
     );
     target = fire ? accessTile(w, fire) : { tx: w.campCenter.tx, ty: w.campCenter.ty };
   }
-  if (target && !isNear(c, target.tx, target.ty, 0.6)) {
+  if (target && !isNear(c, target.tx, target.ty, 0.5)) {
     c.state = 'moving';
     moveToward(w, c, target.tx, target.ty, dt, ctx, () => {
       c.sleepComfort = 0.12;
@@ -551,10 +593,10 @@ function actSleep(w: World, c: Character, dt: number, ctx: Ctx) {
     return;
   }
   if (target) {
-    // Settle exactly onto the bed so the sprite lines up with it.
-    const k = Math.min(1, dt * 6);
-    c.x += (tileToWorldX(target.tx) - c.x) * k;
-    c.y += (tileToWorldY(target.ty) - c.y) * k;
+    // Settle exactly onto the bed so the sprite lines up with it, and stay
+    // there — a sleeper half off the mattress looks like a bug.
+    c.x = tileToWorldX(target.tx);
+    c.y = tileToWorldY(target.ty);
   }
   c.state = 'sleeping';
   c.moving = false;

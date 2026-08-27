@@ -1352,6 +1352,38 @@ h4 {
   color: var(--text);
 }
 
+/* Debug tools (hidden behind a triple-tap on the logo) */
+.btn-debug {
+  border-color: #7a5aa8;
+  color: #d8bcf0;
+}
+.menu-brand {
+  cursor: default;
+  user-select: none;
+}
+.debug-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  margin-bottom: 4px;
+}
+.menu-debug .debug-grid .btn {
+  width: auto;
+  text-align: center;
+  padding: 8px 6px;
+  font-size: 12px;
+  margin-bottom: 0;
+}
+.speed-debug {
+  border-color: #7a5aa8;
+  color: #d8bcf0;
+}
+.speed-debug.active {
+  background: linear-gradient(#5a3f80, #402c5c);
+  border-color: #b48ce0;
+  color: #f0e2ff;
+}
+
 /* Settlement overview alerts */
 .alert-list {
   list-style: none;

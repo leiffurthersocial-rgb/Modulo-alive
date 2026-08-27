@@ -54,6 +54,11 @@ export const LINES: Record<string, Line[]> = {
     { text: 'Coming through.', mood: 'neutral' },
     { text: 'Where does this go?', mood: 'neutral' },
   ],
+  hunt: [
+    { text: 'Meat tonight.', mood: 'happy' },
+    { text: 'Clean shot.', mood: 'happy' },
+    { text: 'That will feed everyone.', mood: 'happy' },
+  ],
   foraging: [
     { text: 'Berries over here!', mood: 'happy' },
     { text: 'These are safe to eat, I think.', mood: 'neutral' },

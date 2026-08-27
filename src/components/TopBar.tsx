@@ -61,7 +61,7 @@ export default function TopBar({
   return (
     <div className="topbar">
       <div className="topbar-left">
-        <button className="btn btn-icon" onClick={onMenu} title="Menu">
+        <button className="btn btn-icon" onClick={onMenu} title="Menu (P)">
           ☰
         </button>
         <button
@@ -116,10 +116,12 @@ export default function TopBar({
           </div>
         )}
         <div className="speeds">
-          {engine.speeds.map((s) => (
+          {engine.availableSpeeds().map((s) => (
             <button
               key={s}
-              className={`btn speed ${engine.speed === s ? 'active' : ''}`}
+              className={`btn speed ${engine.speed === s ? 'active' : ''} ${
+                s > 4 ? 'speed-debug' : ''
+              }`}
               onClick={() => engine.setSpeed(s)}
               title={s === 0 ? 'Pause' : `${s}x speed`}
             >

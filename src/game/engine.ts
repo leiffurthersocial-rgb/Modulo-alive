@@ -1,7 +1,9 @@
 import {
+  RESOURCE_TYPES,
   TILE,
   WORK_TYPES,
   type Assignment,
+  type Animal,
   type Building,
   type Character,
   type ExplorationSite,
@@ -21,6 +23,8 @@ import {
   canPlace,
   hasResources,
   idx,
+  invalidateStorageCapacity,
+  removeNode,
   log,
   placeBuilding,
   removeBuilding,
@@ -30,9 +34,15 @@ import {
   worldToTileY,
 } from './sim/world';
 import { RNG } from './core/rng';
-import { buildingDef } from './data/buildings';
+import { PROGRESSION_TIERS, buildingDef } from './data/buildings';
+import { SIM_SECONDS_PER_HOUR } from './sim/tasks';
+import { eventTick } from './sim/events';
+import { injure, kill } from './sim/medical';
+import { populateWildlife } from './sim/wildlife';
 import { createJob, deleteJob, hasJob, JOB_WORK } from './sim/jobs';
 import { canExplore, startExpedition } from './sim/exploration';
+import { animalAt } from './sim/wildlife';
+import { ANIMAL_MAP } from './data/animals';
 import { AUTOSAVE_SLOT, loadGame, saveGame } from './sim/save';
 import { isUnlocked } from './sim/progression';
 import { abandonBed, releaseBed } from './sim/ai';
@@ -58,6 +68,8 @@ export class GameEngine {
 
   speed = 1;
   speeds = [0, 1, 2, 4];
+  /** Unlocked by triple-tapping the logo; adds fast-forward speeds. */
+  debug = false;
   running = false;
 
   selected: number[] = [];
@@ -345,6 +357,17 @@ export class GameEngine {
 
   setSpeed(s: number) {
     this.speed = s;
+    this.emit();
+  }
+
+  /** The speeds currently offered, including the debug fast-forwards. */
+  availableSpeeds(): number[] {
+    return this.debug ? [0, 1, 2, 4, 8, 20] : this.speeds;
+  }
+
+  setDebug(on: boolean) {
+    this.debug = on;
+    if (!on && this.speed > 4) this.setSpeed(4);
     this.emit();
   }
 
@@ -787,6 +810,12 @@ export class GameEngine {
       return;
     }
 
+    const animal = animalAt(this.world, x, y, 20);
+    if (animal) {
+      this.orderHunt(this.selected, animal);
+      return;
+    }
+
     const node = this.nodeAtTile(tx, ty);
     if (node) {
       this.orderWorkNode(this.selected, node);
@@ -877,6 +906,38 @@ export class GameEngine {
       c.thinkT = 0;
       if (c.state === 'sleeping') releaseBed(w, c);
     }
+    this.emit();
+  }
+
+  /** Send the selection after a specific animal. */
+  orderHunt(ids: number[], animal: Animal) {
+    const w = this.world;
+    animal.marked = true;
+    let job = null;
+    for (const j of w.jobs.values()) {
+      if (j.type === 'hunt' && j.targetId === animal.id) {
+        job = j;
+        break;
+      }
+    }
+    if (!job) {
+      job = createJob(w, 'hunt', {
+        targetKind: 'animal',
+        targetId: animal.id,
+        tx: Math.floor(animal.x / TILE),
+        ty: Math.floor(animal.y / TILE),
+        priority: 90,
+      });
+    }
+    const c = w.characters.find((x) => x.id === ids[0] && x.alive);
+    if (c) {
+      c.order = { kind: 'work', tx: job.tx, ty: job.ty, targetId: job.id };
+      c.activity = 'order';
+      c.path = [];
+      c.thinkT = 0;
+      if (c.state === 'sleeping') releaseBed(w, c);
+    }
+    this.notice(`Hunting the ${ANIMAL_MAP[animal.kind].label.toLowerCase()}`, 'info');
     this.emit();
   }
 
@@ -1168,6 +1229,135 @@ export class GameEngine {
       c.activity = 'idle';
     }
     c.thinkT = 0;
+    this.emit();
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Debug tools                                                       */
+  /*                                                                   */
+  /* Hidden behind a triple-tap on the logo. Everything here reaches    */
+  /* straight into the simulation, so it is deliberately out of the     */
+  /* way of normal play.                                               */
+  /* ---------------------------------------------------------------- */
+
+  debugAddResources(amount = 250) {
+    for (const r of RESOURCE_TYPES) this.world.stock[r] += amount;
+    this.notice(`+${amount} of every resource`, 'good');
+  }
+
+  debugFillNeeds() {
+    for (const c of this.world.characters) {
+      if (!c.alive) continue;
+      c.hunger = 0;
+      c.energy = 100;
+      c.morale = 100;
+      c.stress = 0;
+      c.health = c.maxHealth;
+      c.sickness = 0;
+      c.injuries = [];
+    }
+    this.notice('Everyone restored', 'good');
+  }
+
+  debugSkipHours(hours: number) {
+    const ctx: Ctx = { pf: this.pf, fx: this.fx, autoGather: this.settings.autoGather };
+    const steps = Math.round((hours * SIM_SECONDS_PER_HOUR) / SIM_STEP);
+    for (let i = 0; i < steps; i++) stepWorld(this.world, SIM_STEP, ctx);
+    this.notice(`Skipped ${hours} game hours`, 'info');
+    this.emit();
+  }
+
+  debugSetTime(hour: number) {
+    const w = this.world;
+    const day = Math.floor(w.time.minutes / 1440);
+    w.time.minutes = day * 1440 + hour * 60;
+    this.notice(`Time set to ${String(hour).padStart(2, '0')}:00`, 'info');
+    this.emit();
+  }
+
+  debugTriggerEvent() {
+    eventTick(this.world, this.fx);
+    this.emit();
+  }
+
+  debugSetWeather(kind: World['weather']['kind']) {
+    this.world.weather.kind = kind;
+    this.world.weather.intensity = 1;
+    this.world.weather.t = 300;
+    this.notice(`Weather: ${kind}`, 'info');
+    this.emit();
+  }
+
+  debugSpawnAnimals(n = 6) {
+    populateWildlife(this.world, this.world.animals.length + n);
+    this.notice(`Wildlife restocked (${this.world.animals.length})`, 'info');
+    this.emit();
+  }
+
+  debugInjureSelected() {
+    const c = this.world.characters.find((x) => x.id === this.selected[0]);
+    if (!c) {
+      this.notice('Select a survivor first', 'warn');
+      return;
+    }
+    injure(this.world, c, null, 0.6, 'a debug wound', this.fx);
+    this.emit();
+  }
+
+  debugKillSelected() {
+    const c = this.world.characters.find((x) => x.id === this.selected[0]);
+    if (!c || !c.alive) {
+      this.notice('Select a living survivor first', 'warn');
+      return;
+    }
+    kill(this.world, c, 'a debug command', this.fx);
+    this.emit();
+  }
+
+  debugUnlockAll() {
+    this.world.progression.level = PROGRESSION_TIERS[PROGRESSION_TIERS.length - 1].level;
+    this.world.progression.wallsUnlocked = true;
+    this.notice('All structures unlocked', 'good');
+    this.emit();
+  }
+
+  debugRevealMap() {
+    for (const s of this.world.sites) s.discovered = true;
+    this.notice('All expedition sites revealed', 'info');
+    this.emit();
+  }
+
+  debugCompleteBlueprints() {
+    let n = 0;
+    for (const b of this.world.buildings.values()) {
+      if (b.state !== 'blueprint') continue;
+      const def = buildingDef(b.def);
+      for (const k of Object.keys(def.cost) as (keyof typeof this.world.stock)[]) {
+        b.delivered[k] = def.cost[k] ?? 0;
+      }
+      b.progress = 1;
+      b.state = 'built';
+      b.hp = b.maxHp;
+      if (def.farm && b.farm) for (const cell of b.farm) cell.tilled = true;
+      n++;
+    }
+    invalidateStorageCapacity(this.world);
+    this.notice(n ? `${n} blueprints completed` : 'No blueprints pending', 'info');
+    this.emit();
+  }
+
+  debugClearForest(radius = 16) {
+    const w = this.world;
+    let n = 0;
+    for (const node of Array.from(w.nodes.values())) {
+      const d = Math.hypot(node.tx - w.campCenter.tx, node.ty - w.campCenter.ty);
+      if (d > radius) continue;
+      if (node.kind === 'berryBush' || node.kind === 'herbPatch') continue;
+      removeNode(w, node);
+      n++;
+    }
+    this.renderer?.invalidateTerrain();
+    this.notice(`${n} obstacles removed near camp`, 'info');
     this.emit();
   }
 
