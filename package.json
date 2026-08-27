@@ -1,0 +1,26 @@
+{
+  "name": "modulo-alive",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Modulo:Alive - a top-down 2D survival & settlement management game",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "simtest": "tsx scripts/simtest.ts",
+    "simtest:idle": "tsx scripts/idlerun.ts"
+  },
+  "dependencies": {
+    "next": "15.1.6",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.7",
+    "@types/react": "19.0.7",
+    "@types/react-dom": "19.0.3",
+    "tsx": "^4.19.2",
+    "typescript": "5.7.3"
+  }
+}
