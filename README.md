@@ -103,6 +103,9 @@ npm run simtest        # asserts the full loop: movement, work, food, building,
 npm run mortality      # collapsing vs dying: the balance of permadeath
 npm run regrowth       # the land refilling after a settlement strips it
 npm run fiber          # fiber stays gettable — it gates beds and bandages
+npm run traits         # the eight are authored, and every survivor is a specialist
+npm run upgrades       # building caps and the upgrade-only tiers hold
+npm run effects        # every status effect is reachable and changes the numbers
 npm run simtest:idle    # 12 days with zero player input — the baseline difficulty
 ```
 
@@ -112,9 +115,10 @@ npm run simtest:idle    # 12 days with zero player input — the baseline diffic
 
 A few things were built to be replaced rather than rewritten:
 
-- **Fixed character traits.** The starting eight already have authored `fixedStats`
-  and `startSkills` in `data/survivors.ts`, so they are the same people every game.
-  Traits are still rolled; fill in `fixedTraits` on a template to pin those too.
+- **The starting eight are authored end to end** in `data/survivors.ts` — stats,
+  starting trades and traits. Everyone carries the trait of the job they are the
+  camp's best at (`WORK_TRAIT` in `data/traits.ts`), including survivors who
+  join later.
 - **New gear.** `data/gear.ts` is the single source for equipment: adding an entry
   makes it craftable at the workbench, wearable, and drawn on the sprite.
 - **New wildlife.** `data/animals.ts` defines each species' speed, temperament and

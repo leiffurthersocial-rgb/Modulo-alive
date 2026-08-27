@@ -4,12 +4,13 @@ import { useState } from 'react';
 import { useEngine } from '@/store/engineStore';
 import {
   BUILDINGS,
+  BUILDING_MAP,
   CATEGORY_LABEL,
   CATEGORY_ORDER,
   type BuildCategory,
 } from '@/game/data/buildings';
 import { RESOURCE_LABEL, type ResourceType } from '@/game/core/types';
-import { isUnlocked } from '@/game/sim/progression';
+import { canBuildDirectly, isUnlocked, upgradeSourceOf } from '@/game/sim/progression';
 import { countBuildings } from '@/game/sim/world';
 
 export default function BuildMenu({ onClose }: { onClose: () => void }) {
@@ -17,6 +18,8 @@ export default function BuildMenu({ onClose }: { onClose: () => void }) {
   const w = engine.world;
   const [cat, setCat] = useState<BuildCategory>('shelter');
 
+  // Upgrade-only tiers are not placeable, but the menu still shows them so the
+  // player can see where a chain leads and what it will take.
   const inCat = BUILDINGS.filter((b) => b.category === cat);
   const cats = CATEGORY_ORDER.filter((c) => {
     if (c === 'defense') return w.progression.wallsUnlocked;
@@ -47,6 +50,8 @@ export default function BuildMenu({ onClose }: { onClose: () => void }) {
       <div className="build-list">
         {inCat.map((def) => {
           const unlocked = isUnlocked(w, def.id);
+          const placeable = canBuildDirectly(w, def.id);
+          const from = def.upgradeOnly ? upgradeSourceOf(def.id) : null;
           const built = countBuildings(w, def.id);
           const atLimit = def.maxCount !== undefined && built >= def.maxCount;
           const affordable = (Object.keys(def.cost) as ResourceType[]).every(
@@ -57,11 +62,17 @@ export default function BuildMenu({ onClose }: { onClose: () => void }) {
             <button
               key={def.id}
               className={`build-item ${active ? 'active' : ''} ${
-                unlocked && !atLimit ? '' : 'locked'
-              }`}
-              disabled={!unlocked || atLimit}
+                placeable && !atLimit ? '' : 'locked'
+              } ${def.upgradeOnly ? 'upgrade-only' : ''}`}
+              disabled={!placeable || atLimit}
               onClick={() => engine.setTool('build', def.id)}
-              title={unlocked ? def.desc : `Unlocks at settlement level ${def.minLevel}`}
+              title={
+                from
+                  ? `Upgrade a ${BUILDING_MAP[from].label} into this`
+                  : unlocked
+                    ? def.desc
+                    : `Unlocks at settlement level ${def.minLevel}`
+              }
             >
               <div className="build-item-head">
                 <span className="build-item-name">{def.label}</span>
@@ -75,11 +86,13 @@ export default function BuildMenu({ onClose }: { onClose: () => void }) {
                 </span>
               </div>
               <p className="build-item-desc">
-                {!unlocked
-                  ? `Requires settlement level ${def.minLevel}`
-                  : atLimit
-                    ? `The camp already has as many as it needs (${def.maxCount})`
-                    : def.desc}
+                {from
+                  ? `Upgrade a ${BUILDING_MAP[from].label} into this — ${def.desc}`
+                  : !unlocked
+                    ? `Requires settlement level ${def.minLevel}`
+                    : atLimit
+                      ? `The camp already has as many as it needs (${def.maxCount})`
+                      : def.desc}
               </p>
               <div className="build-cost">
                 {(Object.keys(def.cost) as ResourceType[]).map((k) => (

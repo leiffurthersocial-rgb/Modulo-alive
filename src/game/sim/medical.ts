@@ -60,6 +60,12 @@ export function injure(
   fx.burst(c.x, c.y - 10, 6, '#c0392b', 'spark', 30, 0.6, 2);
   fx.float(c.x, c.y - 28, `-${Math.round(damage)}`, '#ff7a6a');
   say(w, c, 'hurt', true);
+  // Getting hurt badly frightens most people and infuriates a few.
+  if (sev > 0.35) {
+    if (c.morale < 40 && roll(w) < 0.35) applyEffect(w, c, 'enraged', rollRange(w, 3, 8));
+    else if (roll(w) < 0.5) applyEffect(w, c, 'panicked', rollRange(w, 1, 3));
+    else applyEffect(w, c, 'paranoid', rollRange(w, 6, 14));
+  }
   log(
     w,
     'bad',

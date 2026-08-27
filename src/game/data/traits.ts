@@ -214,6 +214,47 @@ export const TRAITS: TraitDef[] = [
     learnRate: 1.45,
   },
   {
+    id: 'hunter',
+    label: 'Hunter',
+    desc: 'Reads tracks and holds their nerve. Far better at bringing game down.',
+    tone: 'good',
+    workBonus: { hunting: 1.35 },
+    skills: { combat: 3, exploration: 1 },
+    courage: 0.75,
+  },
+  {
+    id: 'cook',
+    label: 'Cook',
+    desc: 'Makes a little go a long way. Meals stretch further.',
+    tone: 'good',
+    workBonus: { cooking: 1.35 },
+    skills: { cooking: 3 },
+  },
+  {
+    id: 'artisan',
+    label: 'Artisan',
+    desc: 'Neat, patient hands. Crafts faster and wastes less.',
+    tone: 'good',
+    workBonus: { crafting: 1.35 },
+    skills: { crafting: 3, repair: 1 },
+  },
+  {
+    id: 'prospector',
+    label: 'Prospector',
+    desc: 'Knows where the good stone is and how to break it.',
+    tone: 'good',
+    workBonus: { mining: 1.35 },
+    skills: { scavenging: 2 },
+  },
+  {
+    id: 'packMule',
+    label: 'Pack Mule',
+    desc: 'Carries more, further, without complaining about it.',
+    tone: 'good',
+    workBonus: { hauling: 1.3 },
+    stats: { strength: 1, endurance: 1 },
+  },
+  {
     id: 'greenThumb',
     label: 'Green Thumb',
     desc: 'Crops grow better under their care.',
@@ -252,6 +293,20 @@ export const TRAIT_MAP: Record<string, TraitDef> = Object.fromEntries(
 );
 
 /** Traits that must never appear together on one survivor. */
+/** The trait that marks someone out as the camp's specialist in a job. */
+export const WORK_TRAIT: Record<string, string> = {
+  woodcutting: 'lumberjack',
+  construction: 'mechanic',
+  hauling: 'packMule',
+  foraging: 'scavenger',
+  hunting: 'hunter',
+  mining: 'prospector',
+  farming: 'greenThumb',
+  cooking: 'cook',
+  medicine: 'medic',
+  crafting: 'artisan',
+};
+
 export const TRAIT_CONFLICTS: string[][] = [
   ['hardWorker', 'lazy'],
   ['brave', 'cowardly'],

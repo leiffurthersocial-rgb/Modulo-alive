@@ -3,6 +3,7 @@ import { clamp } from '../core/util';
 import { socialFactor } from './modifiers';
 import { log, recentlyLogged, roll, rollPick } from './world';
 import { applyEffect, hasEffect } from './effects';
+import { rollRange } from './world';
 import { say } from './dialogue';
 import type { Fx } from './fx';
 
@@ -73,6 +74,9 @@ export function socialTick(w: World, fx: Fx) {
       const tension =
         worn(a) +
         worn(b) +
+        // A survivor in a temper picks fights with whoever is nearest.
+        (hasEffect(a, 'enraged') ? 1.4 : 0) +
+        (hasEffect(b, 'enraged') ? 1.4 : 0) +
         (a.hunger > 78 || b.hunger > 78 ? 0.3 : 0) +
         (a.morale < 30 || b.morale < 30 ? 0.25 : 0);
       const argue = roll(w) < tension * 0.16 && rel < 70;
@@ -82,6 +86,17 @@ export function socialTick(w: World, fx: Fx) {
         a.morale -= 4;
         b.morale -= 5;
         say(w, a, 'stressed', true);
+        // A bad enough row tips someone over into a temper.
+        if (a.morale < 35 && roll(w) < 0.2) {
+          applyEffect(w, a, 'enraged', rollRange(w, 2, 6));
+          log(
+            w,
+            'bad',
+            'Lost Their Temper',
+            `${a.name} squared up to ${b.name} and had to be pulled away.`,
+            [a.id, b.id]
+          );
+        }
         if (roll(w) < 0.2 && !recentlyLogged(w, 'The Argument', 720)) {
           log(
             w,
@@ -127,6 +142,11 @@ export function grieve(w: World, dead: Character) {
     c.morale -= hit;
     // Close friends carry it for days.
     applyEffect(w, c, 'grieving', rel > 55 ? 36 : 14, clamp(rel / 100 + 0.3, 0.3, 1));
+    // Losing a close friend breaks some people and enrages others.
+    if (rel > 70) {
+      if (roll(w) < 0.35) applyEffect(w, c, 'enraged', rollRange(w, 4, 10));
+      else applyEffect(w, c, 'paranoid', rollRange(w, 12, 24));
+    }
     if (rel > 55) say(w, c, 'grief', true);
   }
 }

@@ -9,7 +9,7 @@ import {
   type Stats,
   type WorkType,
 } from '../core/types';
-import { TRAITS, TRAIT_CONFLICTS, TRAIT_MAP } from '../data/traits';
+import { TRAITS, TRAIT_CONFLICTS, TRAIT_MAP, WORK_TRAIT } from '../data/traits';
 import type { SurvivorTemplate } from '../data/survivors';
 import { RNG } from '../core/rng';
 import { clamp } from '../core/util';
@@ -51,7 +51,13 @@ function conflictsWith(chosen: string[], candidate: string): boolean {
 }
 
 function rollTraits(rng: RNG, tpl: SurvivorTemplate): string[] {
-  if (tpl.fixedTraits) return tpl.fixedTraits.slice();
+  if (tpl.fixedTraits) {
+    const fixed = tpl.fixedTraits.slice();
+    // The specialist trait is guaranteed, whatever else is authored.
+    const positional = WORK_TRAIT[tpl.bestWork];
+    if (positional && fixed.indexOf(positional) < 0) fixed.unshift(positional);
+    return fixed;
+  }
   const chosen: string[] = tpl.forcedTraits ? tpl.forcedTraits.slice() : [];
   const want = chosen.length + (rng.chance(0.45) ? 3 : 2);
   const pool = TRAITS.map((t) => t.id);

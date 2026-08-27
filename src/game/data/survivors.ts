@@ -3,11 +3,11 @@ import type { Appearance, SkillId, StatId, WorkType } from '../core/types';
 /**
  * The eight starting survivors.
  *
- * Appearance is fixed and authored. Stats and traits are generated per new
- * game, with a few authored nudges (`statBias`, `forcedTraits`) so the
- * characters the design calls out actually feel that way. Swapping the random
- * generation for fully fixed characters later is a matter of filling in
- * `fixedTraits` / `fixedStats` here — no other file needs to change.
+ * These eight are authored end to end: appearance, stats, starting trades and
+ * traits. They are the same people in every game, and each one carries the
+ * trait that marks them out as the camp's specialist in their job.
+ * Survivors who join later are generated, but still get their position's
+ * trait so the rule holds for everyone.
  */
 export interface SurvivorTemplate {
   name: string;
@@ -56,6 +56,7 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
     },
     startSkills: { medicine: 6, scavenging: 3, construction: 2 },
     bestWork: 'medicine',
+    fixedTraits: ['medic', 'social', 'calm'],
     appearance: {
       skin: SKIN_LIGHT,
       hair: '#e3c15c',
@@ -95,6 +96,7 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
     },
     startSkills: { woodcutting: 6, construction: 3 },
     bestWork: 'woodcutting',
+    fixedTraits: ['lumberjack', 'calm', 'fastLearner'],
   },
   {
     name: 'Jovan',
@@ -122,6 +124,7 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
     },
     startSkills: { combat: 6, exploration: 3, scavenging: 2 },
     bestWork: 'hunting',
+    fixedTraits: ['hunter', 'leader', 'brave'],
   },
   {
     name: 'Leonidas',
@@ -148,6 +151,7 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
     },
     startSkills: { construction: 6, repair: 3, scavenging: 3 },
     bestWork: 'construction',
+    fixedTraits: ['mechanic', 'earlyRiser', 'tough'],
   },
   {
     name: 'Erim',
@@ -175,6 +179,7 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
     },
     startSkills: { cooking: 6, crafting: 3, medicine: 2 },
     bestWork: 'cooking',
+    fixedTraits: ['cook', 'nightOwl', 'curious'],
   },
   {
     name: 'Till',
@@ -202,6 +207,7 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
     },
     startSkills: { farming: 6, construction: 3 },
     bestWork: 'farming',
+    fixedTraits: ['greenThumb', 'hardWorker', 'optimistic'],
   },
   {
     name: 'Lenni',
@@ -229,6 +235,7 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
     },
     startSkills: { scavenging: 6, exploration: 4 },
     bestWork: 'foraging',
+    fixedTraits: ['scavenger', 'curious', 'lucky'],
   },
   {
     name: 'Tusya',
@@ -255,6 +262,7 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
     },
     startSkills: { crafting: 6, woodcutting: 3, farming: 2 },
     bestWork: 'crafting',
+    fixedTraits: ['artisan', 'hardWorker', 'generous'],
   },
 ];
 

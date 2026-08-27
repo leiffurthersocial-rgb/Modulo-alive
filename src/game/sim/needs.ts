@@ -54,7 +54,7 @@ export function updateNeeds(w: World, dt: number) {
 
     /* -------- status effects are derived first; everything below reads them -------- */
     const hoursSinceSleep = (w.time.t - c.lastSleepAt) / 30;
-    updateEffects(w, c, hoursSinceSleep);
+    updateEffects(w, c, hoursSinceSleep, w.stock.water > 0);
 
     /* -------- hunger -------- */
     const hungerRate = c.state === 'sleeping' ? 1.3 : 2.2;

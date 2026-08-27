@@ -3,6 +3,7 @@ import { ANIMALS, ANIMAL_MAP, CARCASS_TIME, type AnimalDef } from '../data/anima
 import { clamp } from '../core/util';
 import { log, roll, rollInt, rollRange, tileBlocked, worldToTileX, worldToTileY } from './world';
 import { injure } from './medical';
+import { applyEffect } from './effects';
 import type { Fx } from './fx';
 
 /** Roughly how many animals the forest supports at once. */
@@ -133,6 +134,13 @@ export function updateWildlife(w: World, dt: number, fx: Fx) {
           // Contact. It hurts, and then the animal breaks off.
           if (roll(w) < dt * 0.22) {
             injure(w, threat, 'gash', rollRange(w, 0.15, 0.35), 'a charging boar', fx);
+            // Everyone who saw it is rattled.
+            for (const o of w.characters) {
+              if (!o.alive || o.id === threat.id) continue;
+              if (Math.hypot(o.x - a.x, o.y - a.y) < TILE * 8) {
+                applyEffect(w, o, 'panicked', rollRange(w, 0.5, 2));
+              }
+            }
             a.state = 'flee';
             a.timer = 26; // long enough to actually leave
             a.targetId = -1;
@@ -223,6 +231,7 @@ export function killAnimal(w: World, a: Animal, hunter: Character, fx: Fx) {
   a.vx = 0;
   a.vy = 0;
   w.stats.animalsHunted++;
+  applyEffect(w, hunter, 'emboldened', 8);
   fx.burst(a.x, a.y - 6, 8, '#a33f2a', 'spark', 26, 0.7, 2);
   log(
     w,

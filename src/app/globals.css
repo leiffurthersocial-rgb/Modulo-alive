@@ -991,6 +991,14 @@ h4 {
   border-color: var(--accent);
   background: rgba(80, 66, 24, 0.4);
 }
+.build-item.upgrade-only {
+  opacity: 0.72;
+  border-style: dashed;
+}
+.build-item.upgrade-only .build-item-name::before {
+  content: '↑ ';
+  color: var(--accent-2);
+}
 .build-item.locked {
   opacity: 0.42;
   cursor: not-allowed;

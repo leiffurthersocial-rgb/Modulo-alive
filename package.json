@@ -11,7 +11,10 @@
     "simtest": "tsx scripts/simtest.ts",
     "mortality": "tsx scripts/mortality.ts",
     "regrowth": "tsx scripts/growthtest.ts",
-    "fiber": "tsx scripts/fibertest.ts"
+    "fiber": "tsx scripts/fibertest.ts",
+    "traits": "tsx scripts/traitstest.ts",
+    "upgrades": "tsx scripts/upgradetest.ts",
+    "effects": "tsx scripts/effectstest.ts"
   },
   "dependencies": {
     "next": "^15.5.24",

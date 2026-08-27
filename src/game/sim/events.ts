@@ -43,6 +43,7 @@ import { RESOURCE_LABEL, WORK_LABEL } from '../core/types';
 
 import type { Fx } from './fx';
 import { fortune } from './modifiers';
+import { WORK_TRAIT } from '../data/traits';
 import { applyEffect } from './effects';
 import { settlementSnapshot } from './progression';
 
@@ -149,6 +150,7 @@ function buildEventTable(w: World, living: Character[]): EventOption[] {
           const c = rollPick(w, living);
           injure(w, c, 'burn', rollRange(w, 0.15, 0.45), 'a flare-up at the fire', fx);
           fx.burst(buildingCenterX(b), buildingCenterY(b), 16, '#ff8b3d', 'spark', 50, 0.9, 3);
+          for (const o of living) applyEffect(w, o, 'panicked', rollRange(w, 0.5, 2.5));
           log(
             w,
             'bad',
@@ -202,7 +204,10 @@ function buildEventTable(w: World, living: Character[]): EventOption[] {
       const c = rollPick(w, living);
       const severity = rollRange(w, 0.2, 0.55);
       injure(w, c, 'bite', severity, 'something came out of the treeline', fx);
-      for (const o of living) o.morale -= 3;
+      for (const o of living) {
+        o.morale -= 3;
+        applyEffect(w, o, 'paranoid', rollRange(w, 4, 12));
+      }
       log(
         w,
         'bad',
@@ -216,7 +221,10 @@ function buildEventTable(w: World, living: Character[]): EventOption[] {
   out.push({
     weight: 10,
     run: (w) => {
-      for (const c of living) c.morale -= 2;
+      for (const c of living) {
+        c.morale -= 2;
+        applyEffect(w, c, 'paranoid', rollRange(w, 3, 8));
+      }
       log(
         w,
         'info',
@@ -486,10 +494,13 @@ function recruitStranger(w: World): Character | null {
   if (!available.length) return null;
   const rng = new RNG(w.rngState ^ 0x1234567);
   const name = rollPick(w, available);
+  const bestWork = rollPick(w, WORK_TYPES);
   const tpl: SurvivorTemplate = {
     name,
     blurb: 'Walked out of the forest one evening and stayed.',
-    bestWork: rollPick(w, WORK_TYPES),
+    bestWork,
+    // Everyone carries the trait of the job they are the camp's best at.
+    forcedTraits: [WORK_TRAIT[bestWork]].filter(Boolean),
     appearance: {
       skin: rollPick(w, WANDERER_SKINS),
       hair: rollPick(w, WANDERER_HAIR),

@@ -51,7 +51,7 @@ import { canExplore, startExpedition } from './sim/exploration';
 import { animalAt } from './sim/wildlife';
 import { ANIMAL_MAP } from './data/animals';
 import { AUTOSAVE_SLOT, loadGame, saveGame } from './sim/save';
-import { isUnlocked } from './sim/progression';
+import { canBuildDirectly, isUnlocked, upgradeSourceOf } from './sim/progression';
 import { abandonBed, releaseBed } from './sim/ai';
 
 export type Tool = 'select' | 'build' | 'mark' | 'unmark' | 'demolish' | 'move';
@@ -1165,8 +1165,14 @@ export class GameEngine {
       this.notice(placement.reason, 'warn');
       return;
     }
-    if (!isUnlocked(w, this.buildDefId)) {
-      this.notice('Not unlocked yet', 'warn');
+    if (!canBuildDirectly(w, this.buildDefId)) {
+      const from = upgradeSourceOf(this.buildDefId);
+      this.notice(
+        from
+          ? `Upgrade a ${buildingDef(from).label} into it instead`
+          : 'Not unlocked yet',
+        'warn'
+      );
       return;
     }
     if (!hasResources(w, def.cost)) {

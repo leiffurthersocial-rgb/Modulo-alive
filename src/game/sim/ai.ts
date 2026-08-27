@@ -20,6 +20,7 @@ import {
   nearestBuilding,
   roll,
   rollInt,
+  rollRange,
   takeResource,
   tileBlocked,
   totalFood,
@@ -49,6 +50,7 @@ import {
 } from './exploration';
 import { makeSick } from './medical';
 import { findAnimal } from './wildlife';
+import { applyEffect, hasEffect } from './effects';
 import type { Ctx } from './context';
 import { GEAR, gearStockKey } from '../data/gear';
 
@@ -155,6 +157,23 @@ function think(w: World, c: Character, ctx: Ctx) {
   }
 
   /* -------- 6. work -------- */
+  // Someone who has broken down cannot be reasoned into working. They drift,
+  // and they need people around them before they are any use again.
+  if (hasEffect(c, 'breakingDown')) {
+    if (c.jobId >= 0) releaseJob(w, c);
+    const partner = findSocialPartner(w, c);
+    if (partner) {
+      c.activity = 'social';
+      c.activityTarget = partner.id;
+      c.activityT = 6 + roll(w) * 8;
+    } else {
+      c.activity = 'wander';
+      c.activityT = 4 + roll(w) * 6;
+      wanderTo(w, c, ctx);
+    }
+    return;
+  }
+
   if (c.workEnabled && c.assignment !== 'rest' && c.state !== 'sleeping') {
     if (c.jobId >= 0) {
       const j = w.jobs.get(c.jobId);
@@ -535,7 +554,10 @@ function actEat(w: World, c: Character, dt: number, ctx: Ctx) {
       break;
     }
   }
-  if (ateRaw && ate > 0 && roll(w) < 0.08) makeSick(w, c, 0.25, 'ate raw food');
+  if (ateRaw && ate > 0) {
+    if (roll(w) < 0.06) makeSick(w, c, 0.25, 'ate raw food');
+    else if (roll(w) < 0.3) applyEffect(w, c, 'queasy', rollRange(w, 2, 5));
+  }
   if (ate <= 0) {
     say(w, c, 'noFood', true);
     c.morale -= 4;

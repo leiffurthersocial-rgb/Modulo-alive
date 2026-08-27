@@ -1,5 +1,5 @@
 import type { World } from '../core/types';
-import { PROGRESSION_TIERS, buildingDef } from '../data/buildings';
+import { BUILDING_MAP, PROGRESSION_TIERS, buildingDef } from '../data/buildings';
 import { log } from './world';
 
 export interface ProgressReq {
@@ -99,9 +99,31 @@ export function checkProgression(w: World) {
   }
 }
 
-/** Buildings the player may currently place. */
+/**
+ * Whether the settlement has progressed far enough for a structure at all.
+ * Upgrades use this; direct placement also has to pass `canBuildDirectly`.
+ */
 export function isUnlocked(w: World, defId: string): boolean {
   const d = buildingDef(defId);
   if (d.minLevel && w.progression.level < d.minLevel) return false;
   return true;
+}
+
+/**
+ * Whether the player can place this from the build menu. The upper tier of
+ * every chain is reached by upgrading what is already standing, so the camp
+ * improves rather than sprawls.
+ */
+export function canBuildDirectly(w: World, defId: string): boolean {
+  const d = buildingDef(defId);
+  if (d.upgradeOnly) return false;
+  return isUnlocked(w, defId);
+}
+
+/** The structure that upgrades into this one, if any. */
+export function upgradeSourceOf(defId: string): string | null {
+  for (const def of Object.values(BUILDING_MAP)) {
+    if (def.upgradeTo === defId) return def.id;
+  }
+  return null;
 }

@@ -90,7 +90,12 @@ export function effectPerHour(c: Character, key: 'moralePerHour' | 'healthPerHou
  * Re-derive the condition-driven effects and drop anything that has expired.
  * Called once per needs tick.
  */
-export function updateEffects(w: World, c: Character, hoursSinceSleep: number) {
+export function updateEffects(
+  w: World,
+  c: Character,
+  hoursSinceSleep: number,
+  hasWater: boolean
+) {
   // Expire timed effects.
   for (let i = c.effects.length - 1; i >= 0; i--) {
     const e = c.effects[i];
@@ -130,6 +135,31 @@ export function updateEffects(w: World, c: Character, hoursSinceSleep: number) {
   const outside = c.state !== 'sleeping';
   if (w.weather.kind === 'rain' && outside) {
     applyEffect(w, c, 'soaked', 1.5, w.weather.intensity);
+  }
+
+  /* -------- thirst -------- */
+  set('parched', !hasWater && c.state !== 'sleeping');
+
+  /* -------- the mind gives before the body does -------- */
+  // Sustained misery drags a survivor down, and at the bottom they stop
+  // functioning altogether until someone pulls them back.
+  set('despair', c.morale < 26 && c.morale >= 12);
+  set('breakingDown', c.morale < 12);
+
+  /* -------- blistered: long swings with no tools -------- */
+  if (c.state === 'working' && !c.equipment.tool && c.workStreak > 6) {
+    applyEffect(w, c, 'blistered', 4, clamp((c.workStreak - 6) / 8, 0.3, 1));
+  }
+
+  /* -------- deep in the work -------- */
+  if (
+    c.state === 'working' &&
+    c.jobId >= 0 &&
+    c.workStreak > 3 &&
+    c.morale > 55 &&
+    w.jobs.get(c.jobId)?.work === c.favouriteWork
+  ) {
+    applyEffect(w, c, 'focused', 2);
   }
 
   /* -------- contentment -------- */
