@@ -412,17 +412,24 @@ export function performWork(
     case 'treat': {
       const patient = w.characters.find((p) => p.id === j.targetId);
       if (!patient || !patient.alive) return 'fail';
-      if (w.stock.medicine < 1) return 'fail';
-      const station = w.buildings.get(j.fromId);
-      const quality = station ? (buildingDef(station.def).medical ?? 1) : 0.6;
+      // Bare-hands first aid is worth doing when someone has collapsed.
+      const haveMedicine = w.stock.medicine >= 1;
+      if (!haveMedicine && patient.criticalSince < 0) return 'fail';
+      // Field dressing works; a proper station works better.
+      const station = j.fromId >= 0 ? w.buildings.get(j.fromId) : null;
+      const quality = station ? (buildingDef(station.def).medical ?? 1) : 0.65;
       j.progress += (units * quality) / total;
       addXp(c, 'medicine', dt * 2);
       if (Math.random() < dt * 2)
         fx.burst(patient.x, patient.y - 12, 1, '#8ef0b2', 'plus', 10, 0.9, 3);
       if (j.progress >= 1) {
-        takeResource(w, 'medicine', 1);
+        const usedMedicine = takeResource(w, 'medicine', 1) > 0;
+        // Without supplies it is pressure, water and clean cloth — it keeps
+        // someone alive, but it will not break a fever.
+        const supplies = usedMedicine ? 1 : takeResource(w, 'fiber', 2) > 0 ? 0.5 : 0.35;
         const skill = c.skills.medicine.level;
-        const power = quality * (0.6 + skill * 0.09) * (1 + (c.stats.intelligence - 5) * 0.05);
+        const power =
+          quality * supplies * (0.6 + skill * 0.09) * (1 + (c.stats.intelligence - 5) * 0.05);
         let treatedAny = false;
         for (const inj of patient.injuries) {
           if (inj.treated) continue;
@@ -437,10 +444,16 @@ export function performWork(
           fever.severity = Math.max(0, fever.severity - power * 0.5);
           if (fever.severity <= 0.1) removeEffect(patient, 'fever');
         }
-        removeEffect(patient, 'infected');
+        if (usedMedicine) removeEffect(patient, 'infected');
         applyEffect(w, patient, 'recovering', 8);
         patient.health = Math.min(patient.maxHealth, patient.health + 6 * power);
         patient.morale += 6;
+        // A patient who cannot feed themselves gets fed while they are tended.
+        if (patient.criticalSince >= 0) {
+          const fed = takeResource(w, 'food', 4) || takeResource(w, 'cookedMeat', 4);
+          if (fed > 0) patient.hunger = Math.max(0, patient.hunger - 30);
+          takeResource(w, 'water', 1);
+        }
         adjustRelationship(w, c, patient, 6, 'was treated by');
         addXp(c, 'medicine', 12);
         fx.float(patient.x, patient.y - 24, 'treated', '#8ef0b2');

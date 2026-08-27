@@ -11,8 +11,17 @@ import { checkMortality } from './medical';
 import { checkProgression } from './progression';
 import { removeNode } from './world';
 import { repopulateWildlife, updateWildlife } from './wildlife';
+import { naturalGrowth } from './regrowth';
+import { RNG } from '../core/rng';
 import { hasEffect } from './effects';
 import type { Ctx } from './context';
+
+/** Regrowth draws from the world's own RNG so saves stay reproducible. */
+function growthRng(w: World): RNG {
+  const r = new RNG(w.rngState);
+  w.rngState = (w.rngState * 1664525 + 1013904223) >>> 0 || 1;
+  return r;
+}
 
 /** Fixed simulation step, in sim-seconds. */
 export const SIM_STEP = 0.1;
@@ -99,6 +108,7 @@ export function stepWorld(w: World, dt: number, ctx: Ctx) {
   w.acc.events += dt;
   if (w.acc.events >= EVENT_INTERVAL) {
     eventTick(w, ctx.fx);
+    naturalGrowth(w, growthRng(w));
     repopulateWildlife(w);
     checkMortality(w, ctx.fx);
     checkProgression(w);

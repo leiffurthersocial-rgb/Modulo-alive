@@ -99,7 +99,8 @@ function rollSkills(
 
 function defaultPriorities(
   rng: RNG,
-  skills: Record<SkillId, Skill>
+  skills: Record<SkillId, Skill>,
+  best: WorkType
 ): Record<WorkType, number> {
   const p = {} as Record<WorkType, number>;
   for (const wt of WORK_TYPES) p[wt] = 3;
@@ -111,6 +112,8 @@ function defaultPriorities(
   p.crafting = skills.crafting.level >= 3 ? 4 : 2;
   p.woodcutting = skills.woodcutting.level >= 3 ? 4 : 3;
   p.farming = skills.farming.level >= 3 ? 4 : 3;
+  // Everyone starts leaning hardest into the thing they are best at.
+  p[best] = 4;
   return p;
 }
 
@@ -166,6 +169,7 @@ export function createCharacter(
     deathDay: 0,
     deathCause: '',
     deathAt: 0,
+    criticalSince: -1,
 
     x: init.x,
     y: init.y,
@@ -191,7 +195,8 @@ export function createCharacter(
     assignment: 'auto',
 
     relationships: {},
-    priorities: defaultPriorities(rng, skills),
+    priorities: defaultPriorities(rng, skills, tpl.bestWork),
+    favouriteWork: tpl.bestWork,
     workEnabled: true,
 
     speech: null,

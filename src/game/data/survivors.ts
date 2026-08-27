@@ -1,4 +1,4 @@
-import type { Appearance, SkillId, StatId } from '../core/types';
+import type { Appearance, SkillId, StatId, WorkType } from '../core/types';
 
 /**
  * The eight starting survivors.
@@ -28,6 +28,11 @@ export interface SurvivorTemplate {
   fixedStats?: Partial<Record<StatId, number>>;
   /** Starting skill levels, on top of a small random spread. */
   startSkills?: Partial<Record<SkillId, number>>;
+  /**
+   * The job this survivor is the camp's best at. Every work category the
+   * settlement relies on has someone, so there is always an obvious pick.
+   */
+  bestWork: WorkType;
   blurb: string;
 }
 
@@ -43,13 +48,14 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
     fixedStats: {
       strength: 5,
       agility: 6,
-      intelligence: 7,
+      intelligence: 8,
       perception: 9,
       endurance: 5,
-      charisma: 5,
+      charisma: 6,
       luck: 6,
     },
-    startSkills: { medicine: 3, scavenging: 3, construction: 2 },
+    startSkills: { medicine: 6, scavenging: 3, construction: 2 },
+    bestWork: 'medicine',
     appearance: {
       skin: SKIN_LIGHT,
       hair: '#e3c15c',
@@ -81,13 +87,14 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
     fixedStats: {
       strength: 9,
       agility: 5,
-      intelligence: 5,
+      intelligence: 4,
       perception: 5,
       endurance: 7,
       charisma: 5,
       luck: 5,
     },
-    startSkills: { woodcutting: 4, construction: 3 },
+    startSkills: { woodcutting: 6, construction: 3 },
+    bestWork: 'woodcutting',
   },
   {
     name: 'Jovan',
@@ -105,15 +112,16 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
       accessory: 'scarf',
     },
     fixedStats: {
-      strength: 5,
-      agility: 7,
-      intelligence: 6,
-      perception: 6,
-      endurance: 5,
+      strength: 6,
+      agility: 8,
+      intelligence: 5,
+      perception: 8,
+      endurance: 6,
       charisma: 10,
       luck: 6,
     },
-    startSkills: { cooking: 3, exploration: 3 },
+    startSkills: { combat: 6, exploration: 3, scavenging: 2 },
+    bestWork: 'hunting',
   },
   {
     name: 'Leonidas',
@@ -132,13 +140,14 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
     fixedStats: {
       strength: 10,
       agility: 3,
-      intelligence: 4,
+      intelligence: 5,
       perception: 4,
       endurance: 8,
       charisma: 4,
       luck: 4,
     },
-    startSkills: { woodcutting: 3, construction: 4 },
+    startSkills: { construction: 6, repair: 3, scavenging: 3 },
+    bestWork: 'construction',
   },
   {
     name: 'Erim',
@@ -164,7 +173,8 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
       charisma: 6,
       luck: 5,
     },
-    startSkills: { cooking: 5, crafting: 3, medicine: 2 },
+    startSkills: { cooking: 6, crafting: 3, medicine: 2 },
+    bestWork: 'cooking',
   },
   {
     name: 'Till',
@@ -190,7 +200,8 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
       charisma: 5,
       luck: 5,
     },
-    startSkills: { farming: 4, construction: 3 },
+    startSkills: { farming: 6, construction: 3 },
+    bestWork: 'farming',
   },
   {
     name: 'Lenni',
@@ -214,9 +225,10 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
       perception: 8,
       endurance: 6,
       charisma: 5,
-      luck: 6,
+      luck: 7,
     },
-    startSkills: { exploration: 5, scavenging: 4 },
+    startSkills: { scavenging: 6, exploration: 4 },
+    bestWork: 'foraging',
   },
   {
     name: 'Tusya',
@@ -235,13 +247,14 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
     fixedStats: {
       strength: 7,
       agility: 6,
-      intelligence: 6,
+      intelligence: 7,
       perception: 6,
       endurance: 7,
       charisma: 5,
       luck: 7,
     },
-    startSkills: { farming: 3, woodcutting: 3, crafting: 3 },
+    startSkills: { crafting: 6, woodcutting: 3, farming: 2 },
+    bestWork: 'crafting',
   },
 ];
 

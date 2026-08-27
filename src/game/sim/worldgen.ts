@@ -20,6 +20,7 @@ import {
 } from './world';
 import { clamp } from '../core/util';
 import { populateWildlife } from './wildlife';
+import { captureWildTargets } from './regrowth';
 
 export const WORLD_W = 112;
 export const WORLD_H = 86;
@@ -70,9 +71,12 @@ export function createWorld(seed = Math.floor(Math.random() * 0xffffffff)): Worl
     characters: [],
     jobs: new Map(),
     sites: [],
+    wildTargets: {},
     stock: emptyStockpile(),
     gear: {},
     log: [],
+    prompts: [],
+    nextPromptId: 1,
     time: { t: 0, minutes: 7 * 60 },
     weather: { kind: 'clear', t: 600, intensity: 0 },
     progression: { level: 1, wallsUnlocked: false },
@@ -106,6 +110,7 @@ export function createWorld(seed = Math.floor(Math.random() * 0xffffffff)): Worl
   spawnSurvivors(w, rng);
   recomputeAllBlocked(w);
   populateWildlife(w);
+  captureWildTargets(w);
 
   w.stock.wood = 30;
   w.stock.stone = 12;

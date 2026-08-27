@@ -168,6 +168,21 @@ export const EFFECTS: StatusEffectDef[] = [
     healthPerHour: 1.6,
   },
 
+  {
+    id: 'critical',
+    label: 'Critical',
+    desc: 'Collapsed and barely conscious. Without treatment they may not last.',
+    tone: 'bad',
+    workSpeed: 0,
+    moveSpeed: 0,
+    moralePerHour: -3,
+    healthPerHour: -0.15,
+    // Barely conscious: they are not burning through rations lying there.
+    hungerRate: 0.3,
+    fatigue: 0.4,
+    marker: '⚕',
+  },
+
   /* ---------------- weather and comfort ---------------- */
   {
     id: 'soaked',

@@ -125,6 +125,10 @@ export function updateNeeds(w: World, dt: number) {
     target -= stored >= cap ? 5 : 0;
     target += traitAdd(c, 'moraleDrift') * 12;
     if (c.state === 'socialising') target += 8;
+    if (c.state === 'working' && c.jobId >= 0) {
+      const job = w.jobs.get(c.jobId);
+      if (job && job.work === c.favouriteWork) target += 6;
+    }
     target = clamp(target, 0, 100);
 
     const rate = target > c.morale ? 3.2 : 4.4;

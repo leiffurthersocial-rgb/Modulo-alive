@@ -325,11 +325,22 @@ export function spendResources(
 /* Buildings                                                           */
 /* ------------------------------------------------------------------ */
 
-export function canPlace(
+/** Placement rules without the per-type cap — used when moving what exists. */
+export function canPlaceIgnoringLimit(
   w: World,
   defId: string,
   tx: number,
   ty: number
+): { ok: boolean; reason: string } {
+  return canPlace(w, defId, tx, ty, true);
+}
+
+export function canPlace(
+  w: World,
+  defId: string,
+  tx: number,
+  ty: number,
+  ignoreLimit = false
 ): { ok: boolean; reason: string } {
   const d = buildingDef(defId);
   for (let y = ty; y < ty + d.h; y++) {
@@ -349,7 +360,7 @@ export function canPlace(
         return { ok: false, reason: 'Soil is too rocky to farm' };
     }
   }
-  if (d.maxCount !== undefined && countBuildings(w, defId) >= d.maxCount) {
+  if (!ignoreLimit && d.maxCount !== undefined && countBuildings(w, defId) >= d.maxCount) {
     return {
       ok: false,
       reason:
@@ -401,6 +412,7 @@ export function placeBuilding(
     progress: built ? 1 : 0,
     delivered: {},
     level: 1,
+    upgradeFrom: null,
     hp: d.hp,
     maxHp: d.hp,
     users: [],

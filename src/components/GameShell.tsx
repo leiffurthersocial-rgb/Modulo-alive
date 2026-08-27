@@ -13,6 +13,8 @@ import Objectives from './Objectives';
 import Minimap from './Minimap';
 import Notices from './Notices';
 import Inventory from './Inventory';
+import PromptModal from './PromptModal';
+import Alarms from './Alarms';
 import MainMenu from './MainMenu';
 import { useEngine } from '@/store/engineStore';
 
@@ -145,7 +147,11 @@ export default function GameShell() {
           ? 'Drag across marked resources to unmark them'
           : engine.tool === 'demolish'
             ? 'Tap a building to take it down'
-            : '';
+            : engine.tool === 'move'
+              ? engine.movingBuildingId >= 0
+                ? 'Tap where it should go'
+                : 'Tap a building to pick it up'
+              : '';
 
   return (
     <div className={`game-root ${compact ? 'compact' : ''} ${engine.touch ? 'touch' : ''}`}>
@@ -234,6 +240,10 @@ export default function GameShell() {
               </aside>
             )}
 
+            <div className="hud-alarms">
+              <Alarms />
+            </div>
+
             {invOpen && (
               <div className="hud-inventory">
                 <Inventory onClose={() => setInvOpen(false)} />
@@ -270,6 +280,8 @@ export default function GameShell() {
           </div>
         </>
       )}
+
+      {started && <PromptModal />}
 
       {(!started || menuOpen) && (
         <MainMenu

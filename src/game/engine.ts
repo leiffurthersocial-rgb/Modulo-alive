@@ -1,6 +1,7 @@
 import {
   RESOURCE_TYPES,
   TILE,
+  WORK_SKILL,
   WORK_TYPES,
   type Assignment,
   type Animal,
@@ -8,6 +9,7 @@ import {
   type Character,
   type ExplorationSite,
   type ResourceNode,
+  type WorkType,
   type World,
 } from './core/types';
 import { PathFinder } from './core/pathfinding';
@@ -21,8 +23,10 @@ import {
   NODE_SPEC,
   adjacentFreeTile,
   canPlace,
+  canPlaceIgnoringLimit,
   hasResources,
   idx,
+  recomputeTile,
   invalidateStorageCapacity,
   removeNode,
   log,
@@ -38,7 +42,8 @@ import { PROGRESSION_TIERS, buildingDef } from './data/buildings';
 import { SIM_SECONDS_PER_HOUR } from './sim/tasks';
 import { eventTick } from './sim/events';
 import { injure, kill } from './sim/medical';
-import { applyEffect } from './sim/effects';
+import { applyEffect, hasEffect } from './sim/effects';
+import { resolvePrompt } from './sim/prompts';
 import { EFFECT_MAP } from './data/effects';
 import { populateWildlife } from './sim/wildlife';
 import { createJob, deleteJob, hasJob, JOB_WORK } from './sim/jobs';
@@ -49,7 +54,18 @@ import { AUTOSAVE_SLOT, loadGame, saveGame } from './sim/save';
 import { isUnlocked } from './sim/progression';
 import { abandonBed, releaseBed } from './sim/ai';
 
-export type Tool = 'select' | 'build' | 'mark' | 'unmark' | 'demolish';
+export type Tool = 'select' | 'build' | 'mark' | 'unmark' | 'demolish' | 'move';
+
+/** A condition that needs the player to do something about it. */
+export interface GameAlarm {
+  key: string;
+  tone: 'bad' | 'critical';
+  title: string;
+  body: string;
+  charId: number;
+  action: string | null;
+  actionLabel: string;
+}
 
 export interface Notice {
   id: number;
@@ -72,6 +88,8 @@ export class GameEngine {
   speeds = [0, 1, 2, 4];
   /** Unlocked by triple-tapping the logo; adds fast-forward speeds. */
   debug = false;
+  /** Building picked up by the Move tool, waiting for a destination. */
+  movingBuildingId = -1;
   running = false;
 
   selected: number[] = [];
@@ -92,8 +110,12 @@ export class GameEngine {
     autosave: true,
     speechBubbles: true,
     autoGather: true,
-    pauseOnDeath: false,
+    pauseOnDeath: true,
+    pauseOnPrompt: true,
+    alarmOnInjury: true,
   };
+  /** Speed to restore once a prompt is dealt with. */
+  private speedBeforePrompt = -1;
 
   private listeners = new Set<() => void>();
   private version = 0;
@@ -280,6 +302,19 @@ export class GameEngine {
 
     this.pruneNotices();
 
+    // A decision waiting for the player stops the clock, so nothing important
+    // slides past while they are reading it.
+    if (this.settings.pauseOnPrompt) {
+      if (this.world.prompts.length > 0 && this.speed > 0) {
+        this.speedBeforePrompt = this.speed;
+        this.setSpeed(0);
+      } else if (this.world.prompts.length === 0 && this.speedBeforePrompt > 0) {
+        const restore = this.speedBeforePrompt;
+        this.speedBeforePrompt = -1;
+        if (this.speed === 0) this.setSpeed(restore);
+      }
+    }
+
     if (this.renderer) {
       const opts: RenderOptions = {
         showSpeech: this.settings.speechBubbles,
@@ -383,9 +418,108 @@ export class GameEngine {
   }
 
   setTool(t: Tool, defId?: string) {
+    if (t !== 'move') this.movingBuildingId = -1;
     this.tool = t;
     this.buildDefId = t === 'build' ? (defId ?? this.buildDefId) : null;
     if (t !== 'select') this.orderMode = false;
+    this.emit();
+  }
+
+  /* -------- moving structures -------- */
+
+  /**
+   * Move tool. The first tap picks a structure up, the second sets it down.
+   * Blueprints move for free; finished buildings cost a little labour, which
+   * is charged as a small chunk of their materials.
+   */
+  moveAt(x: number, y: number) {
+    const w = this.world;
+    const tx = worldToTileX(x);
+    const ty = worldToTileY(y);
+
+    if (this.movingBuildingId < 0) {
+      const b = this.buildingAtTile(tx, ty);
+      if (!b) {
+        this.notice('Tap a building to pick it up', 'info');
+        return;
+      }
+      this.movingBuildingId = b.id;
+      this.notice(`Moving the ${buildingDef(b.def).label} — tap where it should go`, 'info');
+      this.emit();
+      return;
+    }
+
+    const b = w.buildings.get(this.movingBuildingId);
+    if (!b) {
+      this.movingBuildingId = -1;
+      return;
+    }
+    const def = buildingDef(b.def);
+    const nx = tx - Math.floor((def.w - 1) / 2);
+    const ny = ty - Math.floor((def.h - 1) / 2);
+    if (nx === b.tx && ny === b.ty) {
+      this.movingBuildingId = -1;
+      this.emit();
+      return;
+    }
+
+    // Lift it out before testing, so it does not collide with itself.
+    const saved: Building = { ...b, delivered: { ...b.delivered } };
+    removeBuilding(w, b);
+    const placement = canPlaceIgnoringLimit(w, b.def, nx, ny);
+    if (!placement.ok) {
+      const back = placeBuilding(w, saved.def, saved.tx, saved.ty, saved.state === 'built', this.rng);
+      Object.assign(back, saved, { id: back.id });
+      this.reindexBuilding(back);
+      this.notice(placement.reason, 'warn');
+      this.movingBuildingId = back.id;
+      this.emit();
+      return;
+    }
+
+    const moved = placeBuilding(w, saved.def, nx, ny, saved.state === 'built', this.rng);
+    Object.assign(moved, saved, { id: moved.id, tx: nx, ty: ny });
+    this.reindexBuilding(moved);
+
+    // Taking a finished structure apart and re-raising it costs something.
+    if (saved.state === 'built') {
+      for (const k of Object.keys(def.cost) as (keyof typeof w.stock)[]) {
+        const toll = Math.ceil((def.cost[k] ?? 0) * 0.15);
+        w.stock[k] = Math.max(0, w.stock[k] - toll);
+      }
+      moved.hp = Math.max(1, saved.hp * 0.85);
+    }
+    // Anyone who slept here or was working on it needs re-pointing.
+    for (const c of w.characters) {
+      if (c.sleepBuildingId === saved.id) c.sleepBuildingId = moved.id;
+    }
+    for (const j of Array.from(w.jobs.values())) {
+      if (j.targetId === saved.id) deleteJob(w, j.id);
+    }
+
+    this.movingBuildingId = -1;
+    this.selectedBuildingId = moved.id;
+    this.fx.dust((nx + def.w / 2) * TILE, (ny + def.h / 2) * TILE, '#cfe8ff');
+    this.notice(`${def.label} moved`, 'good');
+    this.emit();
+  }
+
+  /** Re-write the tile index after a building object is replaced wholesale. */
+  private reindexBuilding(b: Building) {
+    const w = this.world;
+    for (let y = b.ty; y < b.ty + b.h; y++) {
+      for (let x = b.tx; x < b.tx + b.w; x++) {
+        if (x < 0 || y < 0 || x >= w.width || y >= w.height) continue;
+        w.buildingAt[idx(w, x, y)] = b.id;
+        recomputeTile(w, x, y);
+      }
+    }
+    invalidateStorageCapacity(w);
+  }
+
+  cancelMove() {
+    if (this.movingBuildingId < 0) return;
+    this.movingBuildingId = -1;
     this.emit();
   }
 
@@ -629,6 +763,10 @@ export class GameEngine {
         this.demolishAt(wp.x, wp.y);
         return;
       }
+      if (this.tool === 'move') {
+        this.moveAt(wp.x, wp.y);
+        return;
+      }
       if (this.orderMode) {
         this.rightClick(wp.x, wp.y);
         return;
@@ -654,6 +792,10 @@ export class GameEngine {
     }
     if (this.tool === 'demolish') {
       this.demolishAt(wp.x, wp.y);
+      return;
+    }
+    if (this.tool === 'move') {
+      this.moveAt(wp.x, wp.y);
       return;
     }
     this.leftClick(wp.x, wp.y, e.shiftKey);
@@ -798,6 +940,7 @@ export class GameEngine {
 
   private rightClick(x: number, y: number) {
     if (this.tool !== 'select') {
+      this.cancelMove();
       this.setTool('select');
       return;
     }
@@ -1049,7 +1192,21 @@ export class GameEngine {
     for (const j of Array.from(w.jobs.values())) {
       if (j.targetId === b.id) deleteJob(w, j.id);
     }
+
+    const revertTo = b.upgradeFrom;
+    const { tx, ty, level, farm, owner, users } = b;
     removeBuilding(w, b);
+
+    // Cancelling an upgrade puts the old structure back, rather than leaving
+    // the player with a hole where their kitchen used to be.
+    if (revertTo && canPlace(w, revertTo, tx, ty).ok) {
+      const restored = placeBuilding(w, revertTo, tx, ty, true, this.rng);
+      restored.level = Math.max(1, level - 1);
+      restored.farm = farm ?? restored.farm;
+      restored.owner = owner;
+      restored.users = users;
+      this.notice(`Upgrade cancelled — ${buildingDef(revertTo).label} restored`, 'info');
+    }
     this.emit();
   }
 
@@ -1103,6 +1260,10 @@ export class GameEngine {
     }
     const nb = placeBuilding(w, next.id, tx, ty, false, this.rng);
     nb.level = saved.level + 1;
+    nb.upgradeFrom = saved.def;
+    nb.owner = saved.owner;
+    // Carry the crop beds across so an upgraded farm keeps its planting.
+    if (saved.farm && nb.farm) nb.farm = saved.farm;
     log(w, 'info', 'Upgrade started', `The ${def.label} is being upgraded to a ${next.label}.`, []);
     this.emit();
   }
@@ -1232,6 +1393,145 @@ export class GameEngine {
     }
     c.thinkT = 0;
     this.emit();
+  }
+
+  /** Apply a decision the player made on a prompt. */
+  answerPrompt(promptId: number, optionId: string) {
+    const msg = resolvePrompt(this.world, promptId, optionId);
+    if (msg) this.notice(msg, 'info');
+    this.emit();
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Alarms                                                            */
+  /*                                                                   */
+  /* Conditions that genuinely need the player to step in. Each one     */
+  /* carries an action that does something concrete, so an alarm is a   */
+  /* prompt to act rather than just a red light.                        */
+  /* ---------------------------------------------------------------- */
+
+  alarms(): GameAlarm[] {
+    const w = this.world;
+    const out: GameAlarm[] = [];
+    const living = w.characters.filter((c) => c.alive);
+
+    for (const c of living) {
+      if (c.criticalSince < 0) continue;
+      out.push({
+        key: `critical-${c.id}`,
+        tone: 'critical',
+        title: `${c.name} is critical`,
+        body: 'They have collapsed and cannot move. Someone has to reach them.',
+        charId: c.id,
+        action: w.stock.medicine > 0 ? 'sendMedic' : null,
+        actionLabel: 'Send the medic',
+      });
+    }
+
+    if (this.settings.alarmOnInjury) {
+      const hurt = living.filter(
+        (c) => c.criticalSince < 0 && (c.injuries.some((i) => !i.treated) || hasEffect(c, 'fever'))
+      );
+      if (hurt.length) {
+        const worst = hurt[0];
+        out.push({
+          key: `hurt-${hurt.map((c) => c.id).join('-')}`,
+          tone: 'bad',
+          title:
+            hurt.length === 1 ? `${worst.name} needs treatment` : `${hurt.length} need treatment`,
+          body:
+            w.stock.medicine > 0
+              ? 'Untreated wounds get infected. Put someone on medicine.'
+              : 'There is no medicine in store — someone needs to craft or find some.',
+          charId: worst.id,
+          action: w.stock.medicine > 0 ? 'sendMedic' : 'craftMedicine',
+          actionLabel: w.stock.medicine > 0 ? 'Send the medic' : 'Prioritise medicine',
+        });
+      }
+    }
+
+    const starving = living.filter((c) => c.hunger > 90);
+    if (starving.length) {
+      out.push({
+        key: `starving-${starving.length}`,
+        tone: 'critical',
+        title: `${starving.length} survivor(s) are starving`,
+        body: 'Get food into the stores now — foraging, hunting or the fields.',
+        charId: starving[0].id,
+        action: 'foodDrive',
+        actionLabel: 'All hands to food',
+      });
+    }
+
+    return out;
+  }
+
+  /** Run the action attached to an alarm. */
+  runAlarmAction(action: string) {
+    const w = this.world;
+    switch (action) {
+      case 'sendMedic': {
+        const medic = this.bestAt('medicine');
+        if (!medic) {
+          this.notice('Nobody is fit to treat anyone', 'warn');
+          return;
+        }
+        this.setAssignment(medic.id, 'medicine');
+        medic.priorities.medicine = 4;
+        this.selectCharacter(medic.id);
+        this.centerOnCharacter(medic.id);
+        this.notice(`${medic.name} is on medical duty`, 'good');
+        break;
+      }
+      case 'craftMedicine': {
+        const crafter = this.bestAt('crafting');
+        if (crafter) {
+          this.setAssignment(crafter.id, 'crafting');
+          this.notice(`${crafter.name} is making medicine`, 'good');
+        }
+        const forager = this.bestAt('foraging');
+        if (forager) this.setAssignment(forager.id, 'foraging');
+        break;
+      }
+      case 'foodDrive': {
+        let n = 0;
+        for (const c of w.characters) {
+          if (!c.alive || c.criticalSince >= 0) continue;
+          // Hunters keep hunting; everyone else forages or farms.
+          const job =
+            c.favouriteWork === 'hunting'
+              ? 'hunting'
+              : c.favouriteWork === 'farming'
+                ? 'farming'
+                : c.favouriteWork === 'cooking'
+                  ? 'cooking'
+                  : 'foraging';
+          this.setAssignment(c.id, job as Assignment);
+          n++;
+        }
+        this.notice(`${n} survivors switched to food`, 'good');
+        break;
+      }
+      default:
+        break;
+    }
+    this.emit();
+  }
+
+  /** The camp's best available hand for a kind of work. */
+  bestAt(work: WorkType): Character | null {
+    let best: Character | null = null;
+    let bestScore = -Infinity;
+    for (const c of this.world.characters) {
+      if (!c.alive || c.criticalSince >= 0) continue;
+      const skill = c.skills[WORK_SKILL[work]]?.level ?? 0;
+      const score = skill * 2 + (c.favouriteWork === work ? 12 : 0) + c.health / 20;
+      if (score > bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    }
+    return best;
   }
 
   /* ---------------------------------------------------------------- */

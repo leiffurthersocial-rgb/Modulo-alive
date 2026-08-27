@@ -392,20 +392,23 @@ export function generateJobs(w: World, autoGather = true) {
     const needsCare =
       c.injuries.some((i) => !i.treated) || hasEffect(c, 'fever') || hasEffect(c, 'infected');
     if (!needsCare) continue;
-    if (w.stock.medicine < 1) continue;
+    // Someone on the ground always gets help; medicine just makes it work.
+    if (w.stock.medicine < 1 && c.criticalSince < 0) continue;
     if (index.has('treat', c.id)) continue;
-    const bed = bestBuilding(w, (b) => !!buildingDef(b.def).medical);
-    if (!bed) continue;
-    const at = accessTile(w, bed);
+    // First aid happens wherever the patient is. A medical building only makes
+    // it work better — it is not a prerequisite for helping someone.
+    const station = bestBuilding(w, (b) => !!buildingDef(b.def).medical);
+    const at = adjacentFreeTile(w, Math.floor(c.x / TILE), Math.floor(c.y / TILE));
     if (!at) continue;
     index.add('treat', c.id);
     createJob(w, 'treat', {
       targetKind: 'character',
       targetId: c.id,
-      fromId: bed.id,
+      fromId: station ? station.id : -1,
       tx: at.tx,
       ty: at.ty,
-      priority: 95,
+      // A collapsed survivor outranks everything else in the settlement.
+      priority: c.criticalSince >= 0 ? 200 : 95,
     });
   }
 
@@ -683,11 +686,14 @@ export function scoreJob(
   const crowdPenalty = j.priority >= 80 ? crowding * 3 : crowding * 11;
 
   const pinned = c.assignment === j.work ? 40 : 0;
+  // The camp's specialist for a job is the obvious pick for it.
+  const favoured = c.favouriteWork === j.work ? 22 : 0;
 
   return (
     j.priority * (0.4 + stars * 0.22) +
     skill * 2.6 +
-    pinned -
+    pinned +
+    favoured -
     crowdPenalty -
     distTiles * 0.9
   );

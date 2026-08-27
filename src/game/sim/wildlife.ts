@@ -6,7 +6,7 @@ import { injure } from './medical';
 import type { Fx } from './fx';
 
 /** Roughly how many animals the forest supports at once. */
-const TARGET_POPULATION = 16;
+const TARGET_POPULATION = 26;
 /** Sim-seconds between repopulation attempts. */
 const RESPAWN_INTERVAL = 45;
 
@@ -111,24 +111,34 @@ export function updateWildlife(w: World, dt: number, fx: Fx) {
     }
 
     a.timer -= dt;
-    const threat = nearestPerson(w, a, def.alertRange * TILE);
+
+    // An animal that has just bolted stays bolted for a while. Without this a
+    // boar re-charges the moment it stops, and gores the same person to death.
+    const spooked = a.state === 'flee' && a.timer > 0;
+    const threat = spooked ? null : nearestPerson(w, a, def.alertRange * TILE);
 
     if (threat) {
       const dx = a.x - threat.x;
       const dy = a.y - threat.y;
       const dist = Math.hypot(dx, dy) || 1;
-      // A wounded or cornered boar turns on whoever is closest.
-      if (def.aggressive && (a.hp < a.maxHp * 0.85 || dist < TILE * 3)) {
+      // A cornered boar turns on whoever is closest — but a badly wounded one
+      // breaks and runs like anything else would.
+      const badlyHurt = a.hp < a.maxHp * 0.35;
+      if (def.aggressive && !badlyHurt && dist < TILE * 2.5) {
         a.state = 'charge';
         a.targetId = threat.id;
         a.vx = -dx / dist;
         a.vy = -dy / dist;
-        if (dist < TILE * 1.2) {
-          // Contact. Boars hurt.
-          if (roll(w) < dt * 0.5) {
-            injure(w, threat, 'gash', rollRange(w, 0.2, 0.5), 'a charging boar', fx);
+        if (dist < TILE * 1.1) {
+          // Contact. It hurts, and then the animal breaks off.
+          if (roll(w) < dt * 0.22) {
+            injure(w, threat, 'gash', rollRange(w, 0.15, 0.35), 'a charging boar', fx);
             a.state = 'flee';
-            a.timer = 6;
+            a.timer = 26; // long enough to actually leave
+            a.targetId = -1;
+            const away = Math.hypot(dx, dy) || 1;
+            a.vx = dx / away;
+            a.vy = dy / away;
           }
         }
       } else {
@@ -148,7 +158,16 @@ export function updateWildlife(w: World, dt: number, fx: Fx) {
     if (a.state === 'graze' && a.timer <= 0) {
       // Amble somewhere new, or stand and graze a while.
       if (roll(w) < 0.55) {
-        const ang = roll(w) * Math.PI * 2;
+        let ang = roll(w) * Math.PI * 2;
+        // Now and then they drift toward the meadows near the settlement,
+        // which keeps hunting a live option instead of a long expedition.
+        // Only the harmless ones drift toward the settlement's meadows.
+        if (!def.aggressive && roll(w) < 0.3) {
+          const dx = w.campCenter.tx * TILE - a.x;
+          const dy = w.campCenter.ty * TILE - a.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 22 * TILE) ang = Math.atan2(dy, dx) + rollRange(w, -0.6, 0.6);
+        }
         a.vx = Math.cos(ang);
         a.vy = Math.sin(ang);
         a.state = 'wander';
@@ -173,11 +192,25 @@ export function updateWildlife(w: World, dt: number, fx: Fx) {
   }
 }
 
-/** Slowly restock the forest so hunting stays sustainable. */
+/**
+ * Slowly restock the forest so hunting stays sustainable. Carcasses do not
+ * count toward the population, so a good hunt is always replaced.
+ */
 export function repopulateWildlife(w: World) {
   const alive = w.animals.filter((a) => a.state !== 'dead').length;
   if (alive >= TARGET_POPULATION) return;
-  populateWildlife(w, alive + 1 + Math.floor(w.animals.length * 0));
+  // A couple at a time, so the forest refills over game days.
+  const wanted = Math.min(2, TARGET_POPULATION - alive);
+  let born = 0;
+  let guard = 0;
+  while (born < wanted && guard++ < 400) {
+    const tx = rollInt(w, 2, w.width - 2);
+    const ty = rollInt(w, 2, w.height - 2);
+    if (tileBlocked(w, tx, ty)) continue;
+    if (Math.hypot(tx - w.campCenter.tx, ty - w.campCenter.ty) < 14) continue;
+    spawnAnimal(w, pickKind(w), tx * TILE + TILE / 2, ty * TILE + TILE / 2);
+    born++;
+  }
 }
 
 export const WILDLIFE_RESPAWN_INTERVAL = RESPAWN_INTERVAL;

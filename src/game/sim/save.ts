@@ -10,6 +10,7 @@ import {
 import { rle, unrle } from '../core/util';
 import { idx, recomputeAllBlocked } from './world';
 import { SAVE_VERSION } from './worldgen';
+import { captureWildTargets } from './regrowth';
 
 const PREFIX = 'modulo-alive:save:';
 export const AUTOSAVE_SLOT = 'autosave';
@@ -38,9 +39,12 @@ interface SavePayload {
   characters: Character[];
   jobs: Job[];
   sites: ExplorationSite[];
+  wildTargets: Record<string, number>;
   stock: World['stock'];
   gear: Record<string, number>;
   log: World['log'];
+  prompts: World['prompts'];
+  nextPromptId: number;
   time: World['time'];
   weather: World['weather'];
   progression: World['progression'];
@@ -70,9 +74,12 @@ export function serialize(w: World): SavePayload {
     characters: w.characters,
     jobs: Array.from(w.jobs.values()),
     sites: w.sites,
+    wildTargets: w.wildTargets,
     stock: w.stock,
     gear: w.gear,
     log: w.log.slice(-120),
+    prompts: w.prompts,
+    nextPromptId: w.nextPromptId,
     time: w.time,
     weather: w.weather,
     progression: w.progression,
@@ -120,9 +127,12 @@ export function deserialize(raw: any): World {
     characters: data.characters,
     jobs: new Map(),
     sites: data.sites,
+    wildTargets: data.wildTargets ?? {},
     stock: { ...emptyStockpile(), ...data.stock },
     gear: data.gear ?? {},
     log: data.log ?? [],
+    prompts: data.prompts ?? [],
+    nextPromptId: data.nextPromptId ?? 1,
     time: data.time,
     weather: data.weather ?? { kind: 'clear', t: 300, intensity: 0 },
     progression: data.progression,
@@ -193,6 +203,8 @@ export function deserialize(raw: any): World {
   }
 
   recomputeAllBlocked(w);
+  // Older saves predate the regrowth ceilings; take the current land as the mark.
+  if (!data.wildTargets || Object.keys(data.wildTargets).length === 0) captureWildTargets(w);
   return w;
 }
 

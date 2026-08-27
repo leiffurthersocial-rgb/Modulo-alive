@@ -165,6 +165,8 @@ export function workSpeed(c: Character, work: WorkType): number {
     if (typeof b === 'number') m *= b;
   }
 
+  // People are quicker at the work they love.
+  const favourTerm = c.favouriteWork === work ? 1.12 : 1;
   const moraleTerm = 0.75 + (c.morale / 100) * 0.4;
   const hurtTerm = 1 - impairment(c) * 0.6;
   const toolTerm = gearWorkSpeed(c);
@@ -173,7 +175,14 @@ export function workSpeed(c: Character, work: WorkType): number {
   const effectTerm = effectMultiplier(c, 'workSpeed');
 
   return (
-    statTerm * skillTerm * m * moraleTerm * toolTerm * effectTerm * Math.max(0.2, hurtTerm)
+    statTerm *
+    skillTerm *
+    m *
+    favourTerm *
+    moraleTerm *
+    toolTerm *
+    effectTerm *
+    Math.max(0.2, hurtTerm)
   );
 }
 

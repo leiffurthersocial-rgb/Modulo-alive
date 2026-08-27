@@ -36,6 +36,7 @@ import {
   updateMovement,
 } from './movement';
 import { describeJob, findJobFor, releaseJob, finishJob } from './jobs';
+import type { Job } from '../core/types';
 import { performWork, storeCarried, SIM_SECONDS_PER_HOUR } from './tasks';
 import { ambientChatter, say } from './dialogue';
 import { hourOfDay, isNight } from './time';
@@ -60,6 +61,12 @@ import { GEAR, gearStockKey } from '../data/gear';
  * A survivor is never frozen: if nothing else applies they find something to
  * do, which is what makes the camp read as a place people live in.
  */
+
+/**
+ * How close a worker has to be to the tile they work from. Kept tight so
+ * survivors are visibly at the tree, not standing a few metres off it.
+ */
+const WORK_REACH = 0.55;
 
 const THINK_MIN = 0.45;
 const THINK_MAX = 0.9;
@@ -296,6 +303,46 @@ function actWork(w: World, c: Character, dt: number, ctx: Ctx) {
     }
   }
 
+  // Patients move too — and a collapsed one has to be reached where they lie.
+  if (j.type === 'treat') {
+    const patient = w.characters.find((p) => p.id === j.targetId);
+    if (!patient || !patient.alive) {
+      releaseJob(w, c, 2);
+      c.activity = 'idle';
+      return;
+    }
+    const px = Math.floor(patient.x / TILE);
+    const py = Math.floor(patient.y / TILE);
+    if (Math.hypot(patient.x - c.x, patient.y - c.y) > TILE * 1.4) {
+      c.state = 'moving';
+      if (c.repathT <= 0 && (j.tx !== px || j.ty !== py)) {
+        j.tx = px;
+        j.ty = py;
+        clearPath(c);
+      }
+      moveToward(w, c, px, py, dt, ctx, () => {
+        releaseJob(w, c, 8);
+        c.activity = 'idle';
+      });
+      return;
+    }
+    c.state = 'working';
+    c.moving = false;
+    faceTile(c, px, py);
+    const res = performWork(w, c, j, dt, ctx.fx);
+    if (res === 'done') {
+      finishJob(w, c);
+      if (c.order && c.order.kind === 'work') c.order = null;
+      c.activity = 'idle';
+      c.thinkT = 0;
+    } else if (res === 'fail') {
+      releaseJob(w, c, 6);
+      c.activity = 'idle';
+      c.thinkT = 0;
+    }
+    return;
+  }
+
   // Prey moves, so a hunt re-aims at wherever the animal is now.
   let goalX = j.tx;
   let goalY = j.ty;
@@ -310,7 +357,7 @@ function actWork(w: World, c: Character, dt: number, ctx: Ctx) {
     goalY = Math.floor(animal.y / TILE);
     const dx = animal.x - c.x;
     const dy = animal.y - c.y;
-    if (Math.hypot(dx, dy) > TILE * 1.5) {
+    if (Math.hypot(dx, dy) > TILE * 1.15) {
       c.state = 'moving';
       // Repath often; the target will not stay put.
       if (c.repathT <= 0) clearPath(c);
@@ -337,7 +384,7 @@ function actWork(w: World, c: Character, dt: number, ctx: Ctx) {
     return;
   }
 
-  if (!isNear(c, j.tx, j.ty, 1.45)) {
+  if (!isNear(c, j.tx, j.ty, WORK_REACH)) {
     c.state = 'moving';
     moveToward(w, c, j.tx, j.ty, dt, ctx, () => {
       say(w, c, 'stressed');
@@ -349,7 +396,11 @@ function actWork(w: World, c: Character, dt: number, ctx: Ctx) {
 
   c.state = 'working';
   c.moving = false;
-  faceTile(c, j.tx, j.ty);
+  // Settle onto the work tile so the swing connects with the target.
+  const k = Math.min(1, dt * 8);
+  c.x += (tileToWorldX(j.tx) - c.x) * k;
+  c.y += (tileToWorldY(j.ty) - c.y) * k;
+  faceWork(w, c, j);
   const res = performWork(w, c, j, dt, ctx.fx);
   if (res === 'done') {
     finishJob(w, c);
@@ -885,6 +936,24 @@ function moveToward(
       }
     }
   }
+}
+
+/** Face what is actually being worked on, not the tile stood on. */
+function faceWork(w: World, c: Character, j: Job) {
+  if (j.targetKind === 'node') {
+    const n = w.nodes.get(j.targetId);
+    if (n) return faceTile(c, n.tx, n.ty);
+  }
+  if (j.targetKind === 'building' || j.targetKind === 'farmCell') {
+    const b = w.buildings.get(j.targetId);
+    if (b) {
+      if (j.cellIndex >= 0 && b.farm) {
+        return faceTile(c, b.tx + (j.cellIndex % b.w), b.ty + Math.floor(j.cellIndex / b.w));
+      }
+      return faceTile(c, Math.floor(b.tx + b.w / 2), Math.floor(b.ty + b.h / 2));
+    }
+  }
+  faceTile(c, j.tx, j.ty);
 }
 
 function faceTile(c: Character, tx: number, ty: number) {

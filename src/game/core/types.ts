@@ -186,6 +186,8 @@ export interface Building {
   /** Materials delivered to the site so far. */
   delivered: Partial<Record<ResourceType, number>>;
   level: number;
+  /** The structure this was upgraded from; cancelling restores it. */
+  upgradeFrom: string | null;
   hp: number;
   maxHp: number;
   /** Generic per-building payload (farm cells, bed occupancy, ...). */
@@ -468,6 +470,11 @@ export interface Character {
   deathCause: string;
   /** Sim-time of death; the body stays in the world for a while afterwards. */
   deathAt: number;
+  /**
+   * Sim-time this survivor first went critical. Being critical is survivable —
+   * but only if somebody reaches them.
+   */
+  criticalSince: number;
 
   /** World pixel position. */
   x: number;
@@ -507,6 +514,11 @@ export interface Character {
 
   relationships: Record<number, number>;
   priorities: Record<WorkType, number>;
+  /**
+   * The work this survivor is best at and happiest doing. They pick it first,
+   * work it faster, and lose morale when kept off it for too long.
+   */
+  favouriteWork: WorkType;
   workEnabled: boolean;
 
   speech: { text: string; until: number; mood: SpeechMood } | null;
@@ -640,6 +652,32 @@ export interface LogEntry {
 }
 
 /* ------------------------------------------------------------------ */
+/* Prompts — events that stop and ask the player something              */
+/* ------------------------------------------------------------------ */
+
+export interface PromptOption {
+  id: string;
+  label: string;
+  /** One line explaining the consequence, shown under the button. */
+  desc: string;
+  /** Set when the option cannot be taken (not enough to trade, etc). */
+  disabled?: boolean;
+}
+
+export interface GamePrompt {
+  id: number;
+  kind: string;
+  title: string;
+  body: string;
+  tone: 'good' | 'bad' | 'neutral';
+  options: PromptOption[];
+  /** Free-form payload the resolver reads (trade amounts, character ids). */
+  data: Record<string, number>;
+  /** Character portraits to show alongside, if any. */
+  chars: number[];
+}
+
+/* ------------------------------------------------------------------ */
 /* Effects (purely cosmetic, not saved)                                */
 /* ------------------------------------------------------------------ */
 
@@ -707,11 +745,19 @@ export interface World {
   characters: Character[];
   jobs: Map<number, Job>;
   sites: ExplorationSite[];
+  /**
+   * How much of each kind of wild resource the map supports, captured when it
+   * was generated. Regrowth refills toward these rather than a guessed number.
+   */
+  wildTargets: Record<string, number>;
 
   stock: Stockpile;
   /** Crafted equipment waiting in the stores, keyed by gear id. */
   gear: Record<string, number>;
   log: LogEntry[];
+  /** Decisions waiting for the player. The game pauses on the first one. */
+  prompts: GamePrompt[];
+  nextPromptId: number;
 
   time: WorldTimeState;
   weather: Weather;

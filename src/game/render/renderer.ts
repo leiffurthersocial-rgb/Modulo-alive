@@ -700,6 +700,7 @@ export class Renderer {
       progress: 1,
       delivered: {},
       level: 1,
+      upgradeFrom: null,
       hp: def.hp,
       maxHp: def.hp,
       users: [],

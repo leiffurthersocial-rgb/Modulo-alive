@@ -67,6 +67,14 @@ export default function Toolbar({
         <span className="tool-label">Unmark</span>
       </button>
       <button
+        className={`tool ${tool === 'move' ? 'active' : ''}`}
+        onClick={() => engine.setTool(tool === 'move' ? 'select' : 'move')}
+        title="Pick a building up and set it down somewhere else"
+      >
+        <span className="tool-icon">✋</span>
+        <span className="tool-label">Move</span>
+      </button>
+      <button
         className={`tool ${tool === 'demolish' ? 'active' : ''}`}
         onClick={() => engine.setTool(tool === 'demolish' ? 'select' : 'demolish')}
         title="Dismantle a building or cancel a blueprint"

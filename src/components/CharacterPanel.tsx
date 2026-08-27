@@ -52,6 +52,9 @@ export default function CharacterPanel({ character }: { character: Character }) 
             )}
           </div>
           <div className="char-activity">{activity}</div>
+          <div className="char-best" title="What this survivor is best at and happiest doing">
+            Best at <strong>{WORK_LABEL[c.favouriteWork]}</strong>
+          </div>
           {job && (
             <div className="char-progress">
               <div className="char-progress-fill" style={{ width: `${job.progress * 100}%` }} />
@@ -231,6 +234,7 @@ export default function CharacterPanel({ character }: { character: Character }) 
                 title={`Only ${WORK_LABEL[wt].toLowerCase()}`}
               >
                 {WORK_LABEL[wt]}
+                {wt === c.favouriteWork && ' ★'}
               </button>
             ))}
             <button
@@ -249,7 +253,10 @@ export default function CharacterPanel({ character }: { character: Character }) 
           </p>
           {WORK_TYPES.map((wt) => (
             <div key={wt} className="prio-row">
-              <span className="prio-name">{WORK_LABEL[wt]}</span>
+              <span className={`prio-name ${wt === c.favouriteWork ? 'favourite' : ''}`}>
+                {WORK_LABEL[wt]}
+                {wt === c.favouriteWork && <em> ★ best</em>}
+              </span>
               <Stars
                 value={c.priorities[wt] ?? 0}
                 onChange={(v) => engine.setPriority(c.id, wt, v)}

@@ -3,6 +3,7 @@
 import { useEngine } from '@/store/engineStore';
 import Portrait from './Portrait';
 import { currentActivityLabel } from '@/game/sim/ai';
+import { WORK_LABEL } from '@/game/core/types';
 
 export default function CharacterList() {
   const engine = useEngine();
@@ -34,7 +35,9 @@ export default function CharacterList() {
               engine.selectCharacter(c.id);
               engine.centerOnCharacter(c.id);
             }}
-            title={alert ? `${c.name} — ${alert}` : c.name}
+            title={`${c.name} — best at ${WORK_LABEL[c.favouriteWork].toLowerCase()}${
+              alert ? ` · ${alert}` : ''
+            }`}
           >
             <Portrait character={c} scale={1.6} />
             <div className="char-chip-info">

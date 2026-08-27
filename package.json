@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "simtest": "tsx scripts/simtest.ts"
+    "simtest": "tsx scripts/simtest.ts",
+    "mortality": "tsx scripts/mortality.ts",
+    "regrowth": "tsx scripts/growthtest.ts"
   },
   "dependencies": {
     "next": "^15.5.24",

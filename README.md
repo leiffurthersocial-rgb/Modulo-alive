@@ -60,6 +60,8 @@ src/
       needs        hunger, energy, morale, health
       effects      temporary status effects and what they do
       wildlife     roaming animals, and hunting them
+      regrowth     the forest, rock and forage growing back
+      prompts      the events that stop and ask the player something
       movement     path following and separation
       farming, construction (in tasks), exploration, medical
       relationships, events, progression
@@ -98,6 +100,8 @@ The simulation runs headless, which makes the core loop testable without a brows
 ```bash
 npm run simtest        # asserts the full loop: movement, work, food, building,
                        # farming, exploration, injury, permadeath, save/load
+npm run mortality      # collapsing vs dying: the balance of permadeath
+npm run regrowth       # the land refilling after a settlement strips it
 npm run simtest:idle    # 12 days with zero player input — the baseline difficulty
 ```
 

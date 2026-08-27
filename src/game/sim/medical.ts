@@ -3,7 +3,7 @@ import { clamp } from '../core/util';
 import { addResource, log, roll, rollPick, rollRange } from './world';
 import { toughness } from './modifiers';
 import { GEAR_SLOTS, gearStockKey } from '../data/gear';
-import { applyEffect, hasEffect } from './effects';
+import { applyEffect, hasEffect, removeEffect } from './effects';
 import { grieve } from './relationships';
 import { say } from './dialogue';
 import type { Fx } from './fx';
@@ -50,7 +50,9 @@ export function injure(
     bodyPart: rollPick(w, kind.parts),
   };
   c.injuries.push(inj);
-  const damage = 8 + sev * 42;
+  // Already down? Further harm is blunted — the point of collapsing is that
+  // it buys time for someone to reach them.
+  const damage = (6 + sev * 30) * (c.criticalSince >= 0 ? 0.35 : 1);
   c.health -= damage;
   c.morale -= 8 * sev;
   // A serious wound left alone can turn.
@@ -65,7 +67,9 @@ export function injure(
     `${c.name} suffered a ${kind.label.toLowerCase()} to the ${inj.bodyPart} — ${cause}.`,
     [c.id]
   );
-  if (c.health <= 0) kill(w, c, cause, fx);
+  // Running out of health does not kill outright — checkMortality turns it
+  // into a collapse, which somebody still has a chance to treat.
+  if (c.health <= 0) collapse(w, c, fx);
   return inj;
 }
 
@@ -98,6 +102,7 @@ export function kill(w: World, c: Character, cause: string, fx: Fx) {
   }
   c.expedition = null;
   c.deathCause = cause;
+  c.criticalSince = -1;
   c.deathDay = Math.floor(w.time.minutes / 1440) + 1;
   c.deathAt = w.time.t;
   w.stats.deaths++;
@@ -113,25 +118,78 @@ export function kill(w: World, c: Character, cause: string, fx: Fx) {
   grieve(w, c);
 }
 
-/** Called on the slow event tick — starvation, exhaustion, untreated wounds. */
+/** Drop a survivor into the critical state. Survivable, if someone hurries. */
+export function collapse(w: World, c: Character, fx: Fx) {
+  if (!c.alive || c.criticalSince >= 0) return;
+  c.criticalSince = w.time.t;
+  c.health = 1;
+  c.state = 'downed';
+  c.path = [];
+  c.jobId = -1;
+  applyEffect(w, c, 'critical', -1, 1);
+  fx.burst(c.x, c.y - 8, 10, '#c0392b', 'spark', 22, 0.9, 2);
+  fx.shake = Math.max(fx.shake, 0.5);
+  log(
+    w,
+    'alert',
+    `${c.name} has collapsed`,
+    `${c.name} is critical and cannot move. Somebody needs to treat them, now.`,
+    [c.id]
+  );
+  for (const o of w.characters) if (o.alive && o.id !== c.id) o.morale -= 5;
+}
+
+/**
+ * Called on the slow event tick.
+ *
+ * Dying outright is deliberately rare: a survivor who runs out of health
+ * collapses into a critical state instead, and only dies if nobody reaches
+ * them in time. The odds are never zero, though.
+ */
 export function checkMortality(w: World, fx: Fx) {
+  const hours = EVENT_INTERVAL_HOURS;
   for (const c of w.characters) {
     if (!c.alive) continue;
+
     if (c.health <= 0) {
-      let cause = 'untreated injuries';
-      if (c.hunger >= 100) cause = 'starvation';
-      else if (hasEffect(c, 'fever')) cause = 'fever';
-      else if (hasEffect(c, 'infected')) cause = 'an infected wound';
-      else if (c.energy <= 0) cause = 'exhaustion';
-      kill(w, c, cause, fx);
-      continue;
+      if (c.criticalSince < 0) collapse(w, c, fx);
+      else c.health = Math.max(0.1, c.health);
     }
-    if (c.health < c.maxHealth * 0.2 && c.state !== 'sleeping' && c.state !== 'downed') {
+
+    if (c.criticalSince >= 0) {
+      const treated = c.injuries.every((i) => i.treated) && !hasEffect(c, 'infected');
+      const hoursDown = (w.time.t - c.criticalSince) / 30;
+      if (treated && c.health > c.maxHealth * 0.25) {
+        // Pulled through.
+        c.criticalSince = -1;
+        removeEffect(c, 'critical');
+        c.state = 'idle';
+        applyEffect(w, c, 'recovering', 14);
+        log(w, 'good', 'Pulled Through', `${c.name} is out of danger.`, [c.id]);
+      } else {
+        // The longer they lie there untended, the worse the odds get.
+        // Untreated, the odds worsen the longer they lie there — but even a
+        // full day untended is usually survivable. Treated, death is rare.
+        const perHour = treated ? 0.001 : 0.004 + Math.min(0.01, hoursDown * 0.001);
+        if (roll(w) < perHour * hours) {
+          kill(w, c, causeOfDeath(c), fx);
+          continue;
+        }
+      }
+    }
+
+    if (c.state === 'downed' && c.criticalSince < 0 && c.health > c.maxHealth * 0.3) {
+      c.state = 'idle';
+    } else if (
+      c.criticalSince < 0 &&
+      c.health < c.maxHealth * 0.18 &&
+      c.state !== 'sleeping' &&
+      c.state !== 'downed'
+    ) {
       c.state = 'downed';
       c.path = [];
-    } else if (c.state === 'downed' && c.health > c.maxHealth * 0.3) {
-      c.state = 'idle';
     }
+
     // Chronic hunger, soaking rain and untreated wounds all invite worse.
     if (!hasEffect(c, 'fever') && c.hunger > 85 && roll(w) < 0.004) {
       makeSick(w, c, rollRange(w, 0.2, 0.45), 'weakened by hunger');
@@ -147,6 +205,17 @@ export function checkMortality(w: World, fx: Fx) {
       ]);
     }
   }
+}
+
+/** One game hour passes between mortality checks. */
+const EVENT_INTERVAL_HOURS = 1;
+
+function causeOfDeath(c: Character): string {
+  if (c.hunger >= 100) return 'starvation';
+  if (hasEffect(c, 'fever')) return 'fever';
+  if (hasEffect(c, 'infected')) return 'an infected wound';
+  if (c.injuries.length) return 'their injuries';
+  return 'exhaustion';
 }
 
 export function injurySummary(c: Character): string {

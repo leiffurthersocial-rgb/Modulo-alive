@@ -1,5 +1,6 @@
 import {
   TILE,
+  WORK_TYPES,
   type Building,
   type Character,
   type World,
@@ -36,6 +37,10 @@ import { injure, makeSick } from './medical';
 import { adjustRelationship, bestFriend, relationship } from './relationships';
 import { say } from './dialogue';
 import { hourOfDay, isNight } from './time';
+import { TRADE_KEYS, hasPrompt, makeTradeOptions, pushPrompt } from './prompts';
+import { ANIMAL_MAP } from '../data/animals';
+import { RESOURCE_LABEL, WORK_LABEL } from '../core/types';
+
 import type { Fx } from './fx';
 import { fortune } from './modifiers';
 import { applyEffect } from './effects';
@@ -56,7 +61,8 @@ export function eventTick(w: World, fx: Fx) {
     (food < pop * 4 ? 0.5 : 0) +
     (living.filter((c) => c.morale < 35).length / pop) * 0.5 +
     (isNight(w.time.minutes) ? 0.2 : 0);
-  const chance = clamp(0.1 + strain * 0.12, 0.06, 0.34);
+  // Something worth noticing should happen most game days.
+  const chance = clamp(0.2 + strain * 0.14, 0.14, 0.45);
   if (roll(w) > chance) return;
 
   const table = buildEventTable(w, living);
@@ -239,21 +245,213 @@ function buildEventTable(w: World, living: Character[]): EventOption[] {
     });
   }
 
-  // A stranger asks to join — only if the camp can plausibly feed and house them.
+  // A stranger asks to join — the player decides.
   const snap = settlementSnapshot(w);
-  if (food > pop * 16 && pop < 16 && snap.beds > pop) {
+  if (food > pop * 10 && pop < 16 && !hasPrompt(w, 'newcomer')) {
     out.push({
-      weight: 4,
+      weight: 6,
       run: (w, fx) => {
         const c = recruitStranger(w);
         if (!c) return;
         fx.sparkle(c.x, c.y - 12, '#ffe9a8');
+        const short = snap.beds <= pop;
+        pushPrompt(w, {
+          kind: 'newcomer',
+          title: 'A Stranger at the Treeline',
+          tone: 'neutral',
+          body:
+            `${c.name} walked out of the forest with nothing but a coat and asked to stay. ` +
+            `They say they are good at ${WORK_LABEL[c.favouriteWork].toLowerCase()}.` +
+            (short ? ' There is no spare bed for them.' : ''),
+          options: [
+            {
+              id: 'accept',
+              label: `Let ${c.name} stay`,
+              desc: short
+                ? 'Another pair of hands — but somebody will be sleeping rough.'
+                : 'Another pair of hands, and another mouth to feed.',
+            },
+            {
+              id: 'refuse',
+              label: 'Send them away',
+              desc: 'Keeps the larder safe. The others will not like it.',
+            },
+          ],
+          data: { charId: c.id },
+          chars: [c.id],
+        });
+      },
+    });
+  }
+
+  // A trader passes through.
+  if (!hasPrompt(w, 'trader') && buildings.length >= 4) {
+    out.push({
+      weight: 7,
+      run: (w) => {
+        // Offer something the camp is short of, for something it has spare.
+        const wants = TRADE_KEYS.filter((k) => w.stock[k] >= 30);
+        const needs = TRADE_KEYS.filter((k) => w.stock[k] < 20);
+        if (!wants.length || !needs.length) return;
+        const giveRes = rollPick(w, wants);
+        const getRes = rollPick(w, needs);
+        const giveAmount = Math.round(rollRange(w, 18, 34));
+        const getAmount = Math.round(rollRange(w, 10, 22));
+        pushPrompt(w, {
+          kind: 'trader',
+          title: 'A Trader on the Path',
+          tone: 'neutral',
+          body:
+            `A pedlar with a heavy pack stops at the treeline. They will take ` +
+            `${giveAmount} ${RESOURCE_LABEL[giveRes].toLowerCase()} for ` +
+            `${getAmount} ${RESOURCE_LABEL[getRes].toLowerCase()}.`,
+          options: makeTradeOptions(w, giveRes, giveAmount, getRes, getAmount),
+          data: {
+            giveIndex: TRADE_KEYS.indexOf(giveRes),
+            getIndex: TRADE_KEYS.indexOf(getRes),
+            giveAmount,
+            getAmount,
+          },
+          chars: [],
+        });
+      },
+    });
+  }
+
+  // A wandering forager offers to share a find.
+  if (!hasPrompt(w, 'forager')) {
+    out.push({
+      weight: 5,
+      run: (w) => {
+        const getRes = rollPick(w, ['rawFood', 'herbs', 'fiber', 'seeds'] as const);
+        const amount = Math.round(rollRange(w, 12, 30));
+        pushPrompt(w, {
+          kind: 'forager',
+          title: 'A Wanderer with a Full Basket',
+          tone: 'good',
+          body:
+            `Someone thin and travel-worn offers to share what they gathered, ` +
+            `if you will let them warm up by the fire for a night.`,
+          options: [
+            {
+              id: 'accept',
+              label: 'Share the fire',
+              desc: `They leave ${amount} ${RESOURCE_LABEL[getRes].toLowerCase()} behind.`,
+            },
+            { id: 'refuse', label: 'Wave them past', desc: 'No risk, no gain.' },
+          ],
+          data: { getIndex: TRADE_KEYS.indexOf(getRes), getAmount: amount },
+          chars: [],
+        });
+      },
+    });
+  }
+
+  /* ---------------- more things that can happen ---------------- */
+
+  out.push({
+    weight: 8,
+    run: (w, fx) => {
+      const c = rollPick(w, living);
+      applyEffect(w, c, 'inspired', rollRange(w, 6, 14));
+      log(
+        w,
+        'good',
+        'A Good Day',
+        `${c.name} got more done before noon than most manage in a day.`,
+        [c.id]
+      );
+      fx.sparkle(c.x, c.y - 14, '#ffe9a8');
+    },
+  });
+
+  if (w.animals.some((a) => a.state !== 'dead')) {
+    out.push({
+      weight: 9,
+      run: (w) => {
+        const near = w.animals.filter(
+          (a) =>
+            a.state !== 'dead' &&
+            Math.hypot(a.x / TILE - w.campCenter.tx, a.y / TILE - w.campCenter.ty) < 30
+        );
+        if (!near.length) return;
+        const a = rollPick(w, near);
+        a.marked = true;
         log(
           w,
-          'story',
-          'A Stranger at the Treeline',
-          `${c.name} walked out of the forest with nothing but a coat, and asked to stay. The camp said yes.`,
+          'info',
+          'Tracks by the Camp',
+          `${ANIMAL_MAP[a.kind].label} sign close to the settlement. Worth sending a hunter.`,
+          []
+        );
+      },
+    });
+  }
+
+  const beds = findBuildings(w, (b) => b.state === 'built' && !!buildingDef(b.def).beds);
+  if (beds.length) {
+    out.push({
+      weight: 5,
+      run: (w) => {
+        const c = rollPick(w, living);
+        applyEffect(w, c, 'sleepDeprived', -1, 0.5);
+        log(
+          w,
+          'bad',
+          'A Bad Night',
+          `${c.name} lay awake most of the night listening to the trees.`,
           [c.id]
+        );
+      },
+    });
+  }
+
+  out.push({
+    weight: 6,
+    run: (w) => {
+      const found = rollPick(w, ['fiber', 'herbs', 'seeds', 'stone'] as const);
+      const amount = Math.round(rollRange(w, 8, 20));
+      addResource(w, found, amount);
+      log(
+        w,
+        'good',
+        'Something Useful',
+        `A search of the old stores turned up ${amount} ${RESOURCE_LABEL[found].toLowerCase()}.`,
+        []
+      );
+    },
+  });
+
+  out.push({
+    weight: 6,
+    run: (w, fx) => {
+      const c = rollPick(w, living);
+      const other = rollPick(w, living.filter((x) => x.id !== c.id));
+      if (!other) return;
+      adjustRelationship(w, c, other, rollRange(w, 6, 14), 'shared a hard shift');
+      applyEffect(w, c, 'inspired', 6);
+      fx.hearts((c.x + other.x) / 2, (c.y + other.y) / 2);
+      log(
+        w,
+        'story',
+        'Covering for Each Other',
+        `${c.name} took the worst of a job so ${other.name} would not have to. It was noticed.`,
+        [c.id, other.id]
+      );
+    },
+  });
+
+  if (w.stock.medicine < 3) {
+    out.push({
+      weight: 7,
+      run: (w) => {
+        addResource(w, 'herbs', Math.round(rollRange(w, 8, 18)));
+        log(
+          w,
+          'good',
+          'Healroot in the Hollow',
+          'Someone came across a thick stand of healroot while out walking.',
+          []
         );
       },
     });
@@ -291,6 +489,7 @@ function recruitStranger(w: World): Character | null {
   const tpl: SurvivorTemplate = {
     name,
     blurb: 'Walked out of the forest one evening and stayed.',
+    bestWork: rollPick(w, WORK_TYPES),
     appearance: {
       skin: rollPick(w, WANDERER_SKINS),
       hair: rollPick(w, WANDERER_HAIR),
