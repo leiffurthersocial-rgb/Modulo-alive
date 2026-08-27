@@ -60,7 +60,7 @@ export class Renderer {
   private treeSprites: Record<string, NodeSprite[]> = {};
   private rockSprites: NodeSprite[] = [];
   private bushSprites: Record<string, { full: NodeSprite[]; empty: NodeSprite[] }> = {};
-  private charSheets = new Map<number, HTMLCanvasElement>();
+  private charSheets = new Map<string, HTMLCanvasElement>();
   private siteIcon!: HTMLCanvasElement;
   private chunks = new Map<number, HTMLCanvasElement>();
   private chunkStamp = -1;
@@ -89,12 +89,20 @@ export class Renderer {
     this.siteIcon = buildSiteIcon();
   }
 
-  /** Character sprite sheets are cached per survivor. */
+  /**
+   * Character sprite sheets are cached per survivor and per loadout, so gear
+   * shows up the moment it is equipped without rebuilding every frame.
+   */
   sheetFor(c: Character): HTMLCanvasElement {
-    let s = this.charSheets.get(c.id);
+    const key = `${c.id}|${c.equipment.tool ?? ''}|${c.equipment.head ?? ''}|${c.equipment.body ?? ''}`;
+    let s = this.charSheets.get(key);
     if (!s) {
-      s = buildCharacterSheet(c.appearance);
-      this.charSheets.set(c.id, s);
+      s = buildCharacterSheet(c.appearance, c.equipment);
+      // Drop the survivor's older loadouts so the cache cannot grow forever.
+      for (const k of this.charSheets.keys()) {
+        if (k.startsWith(`${c.id}|`)) this.charSheets.delete(k);
+      }
+      this.charSheets.set(key, s);
     }
     return s;
   }
@@ -584,6 +592,7 @@ export class Renderer {
       hp: def.hp,
       maxHp: def.hp,
       users: [],
+      owner: -1,
       variant: 0,
       activeT: 0,
       farm: def.farm

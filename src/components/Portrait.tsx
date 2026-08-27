@@ -7,10 +7,10 @@ import { CHAR_H, CHAR_W, buildCharacterSheet } from '@/game/render/sprites';
 const cache = new Map<string, HTMLCanvasElement>();
 
 function sheetFor(c: Character) {
-  const key = JSON.stringify(c.appearance);
+  const key = `${JSON.stringify(c.appearance)}|${c.equipment.tool ?? ''}|${c.equipment.head ?? ''}|${c.equipment.body ?? ''}`;
   let s = cache.get(key);
   if (!s) {
-    s = buildCharacterSheet(c.appearance);
+    s = buildCharacterSheet(c.appearance, c.equipment);
     cache.set(key, s);
   }
   return s;
@@ -45,7 +45,7 @@ export default function Portrait({
       g.fillRect(0, 0, canvas.width, canvas.height);
       g.globalCompositeOperation = 'source-over';
     }
-  }, [character, character.appearance, scale, dim]);
+  }, [character, character.appearance, character.equipment, scale, dim]);
 
   return <canvas ref={ref} className="portrait" />;
 }

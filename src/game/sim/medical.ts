@@ -2,6 +2,7 @@ import type { Character, Injury, World } from '../core/types';
 import { clamp } from '../core/util';
 import { addResource, log, roll, rollPick, rollRange } from './world';
 import { toughness } from './modifiers';
+import { GEAR_SLOTS, gearStockKey } from '../data/gear';
 import { grieve } from './relationships';
 import { say } from './dialogue';
 import type { Fx } from './fx';
@@ -84,9 +85,13 @@ export function kill(w: World, c: Character, cause: string, fx: Fx) {
     addResource(w, c.carrying.res, c.carrying.amount);
     c.carrying = null;
   }
-  if (c.equipment.tool) {
-    addResource(w, 'tools', 1);
-    c.equipment.tool = null;
+  for (const slot of GEAR_SLOTS) {
+    const id = c.equipment[slot];
+    if (!id) continue;
+    const stockKey = gearStockKey(id);
+    if (stockKey) addResource(w, stockKey, 1);
+    else w.gear[id] = (w.gear[id] ?? 0) + 1;
+    c.equipment[slot] = null;
   }
   c.expedition = null;
   c.deathCause = cause;

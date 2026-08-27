@@ -1,8 +1,8 @@
 import type { World } from '../core/types';
 import { MINUTES_PER_SIM_SECOND } from './time';
-import { updateCharacter, releaseBed } from './ai';
+import { updateCharacter, abandonBed } from './ai';
 import { separate } from './movement';
-import { generateJobs } from './jobs';
+import { generateJobs, workCoverage } from './jobs';
 import { updateNeeds } from './needs';
 import { growthTick, regrowthTick } from './farming';
 import { socialTick } from './relationships';
@@ -57,6 +57,7 @@ export function stepWorld(w: World, dt: number, ctx: Ctx) {
   }
 
   /* -------- characters -------- */
+  ctx.coverage = workCoverage(w);
   for (const c of w.characters) {
     if (!c.alive) continue;
     updateCharacter(w, c, dt, ctx);
@@ -156,6 +157,6 @@ function pruneJobs(w: World) {
 function tidyDead(w: World) {
   for (const c of w.characters) {
     if (c.alive) continue;
-    if (c.sleepBuildingId >= 0) releaseBed(w, c);
+    if (c.sleepBuildingId >= 0) abandonBed(w, c);
   }
 }

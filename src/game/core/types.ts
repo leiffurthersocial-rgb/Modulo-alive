@@ -153,6 +153,11 @@ export interface Building {
   farm?: FarmCell[];
   /** Character id currently sleeping in / using this building. */
   users: number[];
+  /**
+   * For beds: the survivor this one belongs to (-1 = unclaimed). Owned beds
+   * mean people go back to the same place every night instead of shuffling.
+   */
+  owner: number;
   /** Cosmetic seed so identical buildings do not look identical. */
   variant: number;
   /** Set while a worker is actively operating the building (for animation). */
@@ -296,6 +301,15 @@ export const WORK_SKILL: Record<WorkType, SkillId> = {
   crafting: 'crafting',
 };
 
+/** Equipment slots. Each holds a gear id from data/gear.ts, or null. */
+export interface Equipment {
+  tool: string | null;
+  head: string | null;
+  body: string | null;
+}
+
+export type Assignment = 'auto' | 'rest' | WorkType;
+
 export interface Appearance {
   skin: string;
   hair: string;
@@ -410,8 +424,14 @@ export interface Character {
   order: PlayerOrder | null;
 
   carrying: { res: ResourceType; amount: number } | null;
-  /** Equipped tool set, or null. Tools are taken from the stores when working. */
-  equipment: { tool: 'tools' | null };
+  /** Worn and carried gear. Items are drawn from the stores as they are made. */
+  equipment: Equipment;
+  /**
+   * What the player has told this survivor to do.
+   * 'auto' follows their work priorities; a work type pins them to that job
+   * alone; 'rest' takes them off duty entirely.
+   */
+  assignment: Assignment;
 
   relationships: Record<number, number>;
   priorities: Record<WorkType, number>;
@@ -613,6 +633,8 @@ export interface World {
   sites: ExplorationSite[];
 
   stock: Stockpile;
+  /** Crafted equipment waiting in the stores, keyed by gear id. */
+  gear: Record<string, number>;
   log: LogEntry[];
 
   time: WorldTimeState;

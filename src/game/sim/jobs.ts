@@ -9,7 +9,7 @@ import {
   type WorkType,
   type World,
 } from '../core/types';
-import { WORK_SKILL } from '../core/types';
+import { WORK_SKILL, WORK_TYPES } from '../core/types';
 import { buildingDef } from '../data/buildings';
 import { CROP_MAP, CROPS } from '../data/crops';
 import { RECIPES } from '../data/recipes';
@@ -366,8 +366,10 @@ export function generateJobs(w: World) {
     const bench = bestBuilding(w, (b) => !!buildingDef(b.def).crafting);
     if (bench) {
       for (const r of RECIPES) {
-        const outRes = Object.keys(r.output)[0] as ResourceType;
-        if (w.stock[outRes] >= r.autoCap) continue;
+        const have = r.gear
+          ? (w.gear[r.gear] ?? 0) + countEquipped(w, r.gear)
+          : w.stock[Object.keys(r.output)[0] as ResourceType];
+        if (have >= r.autoCap) continue;
         let ok = true;
         for (const k of Object.keys(r.input) as ResourceType[]) {
           if (w.stock[k] < (r.input[k] ?? 0) * 2) ok = false;
@@ -468,6 +470,21 @@ export function generateJobs(w: World) {
     // stone — the per-resource ceiling guarantees there is room for it.
     autoNodeJob(w, index, 'mine', (n) => n.kind === 'rock', 64);
   }
+}
+
+/** How many survivors are already wearing this piece of gear. */
+function countEquipped(w: World, gearId: string): number {
+  let n = 0;
+  for (const c of w.characters) {
+    if (!c.alive) continue;
+    if (
+      c.equipment.tool === gearId ||
+      c.equipment.head === gearId ||
+      c.equipment.body === gearId
+    )
+      n++;
+  }
+  return n;
 }
 
 function resIndex(r: ResourceType): number {
@@ -572,30 +589,71 @@ function autoNodeJob(
 /* Assignment                                                          */
 /* ------------------------------------------------------------------ */
 
+/**
+ * How many survivors are already working each category. Used to spread the
+ * camp across the work that needs doing instead of piling everyone onto
+ * whatever happens to be nearest.
+ */
+export function workCoverage(w: World): Record<WorkType, number> {
+  const out = {} as Record<WorkType, number>;
+  for (const wt of WORK_TYPES) out[wt] = 0;
+  for (const c of w.characters) {
+    if (!c.alive || c.jobId < 0) continue;
+    const j = w.jobs.get(c.jobId);
+    if (j) out[j.work]++;
+  }
+  return out;
+}
+
 /** Score how well a character suits a job; negative means "will not take it". */
-export function scoreJob(w: World, c: Character, j: Job): number {
+export function scoreJob(
+  w: World,
+  c: Character,
+  j: Job,
+  coverage?: Record<WorkType, number>
+): number {
   if (j.assigned >= 0) return -1;
   if (j.blockedUntil > w.time.t) return -1;
-  const stars = c.priorities[j.work] ?? 0;
-  if (stars <= 0) return -1;
   // Treating yourself is not a thing.
   if (j.type === 'treat' && j.targetId === c.id) return -1;
+
+  // A pinned survivor does that job and nothing else.
+  if (c.assignment === 'rest') return -1;
+  if (c.assignment !== 'auto' && c.assignment !== j.work) return -1;
+
+  const stars = c.assignment === j.work ? 4 : (c.priorities[j.work] ?? 0);
+  if (stars <= 0) return -1;
 
   const skill = skillLevel(c, WORK_SKILL[j.work]);
   const dx = tileToWorldX(j.tx) - c.x;
   const dy = tileToWorldY(j.ty) - c.y;
   const distTiles = Math.sqrt(dx * dx + dy * dy) / TILE;
 
+  // Work already covered by someone else is worth less to a second pair of
+  // hands, unless it is urgent enough to want the help.
+  const crowding = coverage ? coverage[j.work] ?? 0 : 0;
+  const crowdPenalty = j.priority >= 80 ? crowding * 3 : crowding * 11;
+
+  const pinned = c.assignment === j.work ? 40 : 0;
+
   return (
-    j.priority * (0.4 + stars * 0.22) + skill * 2.2 - distTiles * 0.9
+    j.priority * (0.4 + stars * 0.22) +
+    skill * 2.6 +
+    pinned -
+    crowdPenalty -
+    distTiles * 0.9
   );
 }
 
-export function findJobFor(w: World, c: Character): Job | null {
+export function findJobFor(
+  w: World,
+  c: Character,
+  coverage?: Record<WorkType, number>
+): Job | null {
   let best: Job | null = null;
   let bestScore = 0;
   for (const j of w.jobs.values()) {
-    const s = scoreJob(w, c, j);
+    const s = scoreJob(w, c, j, coverage);
     if (s > bestScore) {
       bestScore = s;
       best = j;

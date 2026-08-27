@@ -2,11 +2,54 @@ import type { Character, SkillId, StatId, WorkType, World } from '../core/types'
 import { WORK_SKILL } from '../core/types';
 import { TRAIT_MAP, type TraitDef } from '../data/traits';
 import { clamp } from '../core/util';
+import { GEAR_MAP, GEAR_SLOTS } from '../data/gear';
 
 /**
  * Every derived number the simulation uses comes from here, so a trait or a
  * stat can never be decorative: if it is in the data, it is read below.
  */
+
+/** Combined work-speed multiplier from everything the survivor is wearing. */
+export function gearWorkSpeed(c: Character): number {
+  let m = 1;
+  for (const slot of GEAR_SLOTS) {
+    const id = c.equipment[slot];
+    const def = id ? GEAR_MAP[id] : null;
+    if (def?.workSpeed) m *= def.workSpeed;
+  }
+  return m;
+}
+
+/** Combined protection multiplier on incoming injury severity (lower = safer). */
+export function gearProtection(c: Character): number {
+  let m = 1;
+  for (const slot of GEAR_SLOTS) {
+    const id = c.equipment[slot];
+    const def = id ? GEAR_MAP[id] : null;
+    if (def?.protection) m *= def.protection;
+  }
+  return m;
+}
+
+function gearStress(c: Character): number {
+  let m = 1;
+  for (const slot of GEAR_SLOTS) {
+    const id = c.equipment[slot];
+    const def = id ? GEAR_MAP[id] : null;
+    if (def?.stress) m *= def.stress;
+  }
+  return m;
+}
+
+export function gearMorale(c: Character): number {
+  let v = 0;
+  for (const slot of GEAR_SLOTS) {
+    const id = c.equipment[slot];
+    const def = id ? GEAR_MAP[id] : null;
+    if (def?.morale) v += def.morale;
+  }
+  return v;
+}
 
 export function traitDefs(c: Character): TraitDef[] {
   const out: TraitDef[] = [];
@@ -125,7 +168,7 @@ export function workSpeed(c: Character, work: WorkType): number {
   const energyTerm = c.energy < 20 ? 0.6 : c.energy < 40 ? 0.85 : 1;
   const hungerTerm = c.hunger > 90 ? 0.65 : c.hunger > 70 ? 0.88 : 1;
   const hurtTerm = 1 - impairment(c) * 0.6;
-  const toolTerm = c.equipment.tool ? 1.2 : 1;
+  const toolTerm = gearWorkSpeed(c);
 
   return (
     statTerm *
@@ -156,7 +199,7 @@ export function fatigueRate(c: Character): number {
 }
 
 export function stressRate(c: Character): number {
-  return traitMul(c, 'stressGain') * (1 - (c.stats.endurance - 5) * 0.015);
+  return traitMul(c, 'stressGain') * gearStress(c) * (1 - (c.stats.endurance - 5) * 0.015);
 }
 
 export function socialFactor(c: Character): number {
@@ -168,7 +211,7 @@ export function courageFactor(c: Character): number {
 }
 
 export function toughness(c: Character): number {
-  return traitMul(c, 'toughness') * (1 - (c.stats.endurance - 5) * 0.03);
+  return traitMul(c, 'toughness') * gearProtection(c) * (1 - (c.stats.endurance - 5) * 0.03);
 }
 
 export function fortune(c: Character): number {

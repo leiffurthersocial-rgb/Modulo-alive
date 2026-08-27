@@ -1,4 +1,5 @@
-import { TILE, Terrain, type Appearance } from '../core/types';
+import { TILE, Terrain, type Appearance, type Equipment } from '../core/types';
+import { GEAR_MAP } from '../data/gear';
 import { RNG } from '../core/rng';
 
 /**
@@ -373,7 +374,8 @@ function drawCharFrame(
   g: CanvasRenderingContext2D,
   a: Appearance,
   dir: number,
-  frame: number
+  frame: number,
+  eq?: Equipment
 ) {
   const cx = CHAR_W / 2;
   const heavy = a.build === 'heavy';
@@ -421,6 +423,15 @@ function drawCharFrame(
   px(g, cx - bodyW / 2, torsoTop, bodyW, torsoH, a.shirt);
   px(g, cx - bodyW / 2, torsoTop, 2, torsoH, shirtDark);
   px(g, cx - bodyW / 2, torsoTop + torsoH - 1, bodyW, 1, shirtDark);
+
+  /* body armour, worn over the shirt */
+  const bodyGear = eq?.body ? GEAR_MAP[eq.body] : null;
+  if (bodyGear) {
+    px(g, cx - bodyW / 2, torsoTop + 1, bodyW, torsoH - 1, bodyGear.color);
+    px(g, cx - bodyW / 2, torsoTop + 1, bodyW, 1, bodyGear.accent);
+    px(g, cx - bodyW / 2, torsoTop + torsoH - 1, bodyW, 1, bodyGear.accent);
+    if (dir === 0) px(g, cx - 1, torsoTop + 1, 2, torsoH - 2, bodyGear.accent);
+  }
 
   /* arms */
   const armY = torsoTop + 1;
@@ -510,9 +521,58 @@ function drawCharFrame(
     px(g, hx, headTop + 1, headW, headH - 2, a.hair);
     px(g, hx, headTop + headH - 2, headW, 2, hairDark);
   }
+
+  /* headgear, drawn over the hair */
+  const headGear = eq?.head ? GEAR_MAP[eq.head] : null;
+  if (headGear) {
+    px(g, hx - 2, headTop - 1, headW + 4, 2, headGear.color); // brim
+    px(g, hx - 2, headTop + 1, headW + 4, 1, headGear.accent);
+    px(g, hx + 1, headTop - 4, headW - 2, 3, headGear.color); // crown
+    px(g, hx + 1, headTop - 4, headW - 2, 1, headGear.accent);
+  }
+
+  /* a tool in the working hand */
+  const toolGear = eq?.tool ? GEAR_MAP[eq.tool] : null;
+  if (toolGear) drawHandTool(g, cx, bodyW, armY, armH, dir, frame, toolGear);
 }
 
-export function buildCharacterSheet(a: Appearance): HTMLCanvasElement {
+/**
+ * The tool a survivor is holding. It swings with the work animation, so you
+ * can see at a glance who is properly equipped and who is using their hands.
+ */
+function drawHandTool(
+  g: CanvasRenderingContext2D,
+  cx: number,
+  bodyW: number,
+  armY: number,
+  armH: number,
+  dir: number,
+  frame: number,
+  gear: { color: string; accent: string }
+) {
+  const working = frame >= 4;
+  const raised = frame === 4;
+  // Which side the tool sits on, and which way it points.
+  const side = dir === 1 ? -1 : 1;
+  const gripX = cx + side * (bodyW / 2 + 1);
+  const gripY = armY + (working ? (raised ? -4 : 1) : 0) + armH - 2;
+
+  if (working) {
+    // Haft angled up over the shoulder on the raised frame, down on the swing.
+    const len = 7;
+    const dy = raised ? -len : -1;
+    px(g, gripX, gripY + (raised ? dy : 0), 1, raised ? len : 4, gear.accent);
+    // Head of the tool at the far end.
+    const headY = raised ? gripY + dy - 1 : gripY + 3;
+    px(g, gripX - 1, headY, 3, 2, gear.color);
+  } else {
+    // Carried at the side.
+    px(g, gripX, gripY - 2, 1, 5, gear.accent);
+    px(g, gripX - 1, gripY - 4, 3, 2, gear.color);
+  }
+}
+
+export function buildCharacterSheet(a: Appearance, eq?: Equipment): HTMLCanvasElement {
   const c = makeCanvas(CHAR_W * CHAR_FRAMES, CHAR_H * CHAR_DIRS);
   const g = ctx2d(c);
   // Frames are drawn once into a scratch cell so a dark outline can be
@@ -526,7 +586,7 @@ export function buildCharacterSheet(a: Appearance): HTMLCanvasElement {
   for (let dir = 0; dir < CHAR_DIRS; dir++) {
     for (let f = 0; f < CHAR_FRAMES; f++) {
       cg.clearRect(0, 0, CHAR_W, CHAR_H);
-      drawCharFrame(cg, a, dir, f);
+      drawCharFrame(cg, a, dir, f, eq);
 
       og.clearRect(0, 0, CHAR_W, CHAR_H);
       og.globalCompositeOperation = 'source-over';

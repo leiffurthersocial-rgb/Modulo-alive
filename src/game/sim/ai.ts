@@ -46,6 +46,7 @@ import {
 } from './exploration';
 import { makeSick } from './medical';
 import type { Ctx } from './context';
+import { GEAR, gearStockKey } from '../data/gear';
 
 /**
  * Priority-based autonomous behaviour.
@@ -144,7 +145,7 @@ function think(w: World, c: Character, ctx: Ctx) {
   }
 
   /* -------- 6. work -------- */
-  if (c.workEnabled && c.state !== 'sleeping') {
+  if (c.workEnabled && c.assignment !== 'rest' && c.state !== 'sleeping') {
     if (c.jobId >= 0) {
       const j = w.jobs.get(c.jobId);
       if (j && j.assigned === c.id) {
@@ -153,19 +154,15 @@ function think(w: World, c: Character, ctx: Ctx) {
       }
       c.jobId = -1;
     }
-    const job = findJobFor(w, c);
+    const job = findJobFor(w, c, ctx.coverage);
     if (job) {
       job.assigned = c.id;
       c.jobId = job.id;
       c.workT = 0;
       c.activity = 'work';
       c.path = [];
-      // Pick up a tool set from the stores if there is one spare; it makes
-      // every kind of work meaningfully faster.
-      if (!c.equipment.tool && w.stock.tools >= 1) {
-        takeResource(w, 'tools', 1);
-        c.equipment.tool = 'tools';
-      }
+      if (ctx.coverage) ctx.coverage[job.work] = (ctx.coverage[job.work] ?? 0) + 1;
+      equipAvailableGear(w, c);
       return;
     }
   }
@@ -196,6 +193,25 @@ function think(w: World, c: Character, ctx: Ctx) {
     c.activityTarget = -1;
     c.activityT = 2 + roll(w) * 5;
     wanderTo(w, c, ctx);
+  }
+}
+
+/**
+ * Take any spare gear out of the stores. Survivors kit themselves out when
+ * they start work, so crafting a hat or a vest visibly changes the camp.
+ */
+export function equipAvailableGear(w: World, c: Character) {
+  for (const g of GEAR) {
+    if (c.equipment[g.slot]) continue;
+    const stockKey = gearStockKey(g.id);
+    if (stockKey) {
+      if (w.stock[stockKey] < 1) continue;
+      takeResource(w, stockKey, 1);
+    } else {
+      if ((w.gear[g.id] ?? 0) < 1) continue;
+      w.gear[g.id] = (w.gear[g.id] ?? 0) - 1;
+    }
+    c.equipment[g.slot] = g.id;
   }
 }
 
@@ -435,14 +451,9 @@ function actEat(w: World, c: Character, dt: number, ctx: Ctx) {
 function startSleep(w: World, c: Character, ctx: Ctx) {
   c.activity = 'sleep';
   if (c.jobId >= 0) releaseJob(w, c);
-  if (c.sleepBuildingId >= 0) {
-    const b = w.buildings.get(c.sleepBuildingId);
-    if (b && bedFree(w, b, c)) return;
-    releaseBed(w, c);
-  }
-  const bed = findFreeBed(w, c);
+  const bed = claimBed(w, c);
   if (bed) {
-    bed.users.push(c.id);
+    if (!bed.users.includes(c.id)) bed.users.push(c.id);
     c.sleepBuildingId = bed.id;
     c.sleepComfort = buildingDef(bed.def).comfort ?? 0.3;
   } else {
@@ -452,37 +463,65 @@ function startSleep(w: World, c: Character, ctx: Ctx) {
   }
 }
 
-function bedFree(w: World, b: Building, c: Character) {
-  const def = buildingDef(b.def);
-  if (!def.beds) return false;
-  const others = b.users.filter((id) => id !== c.id);
-  return others.length < def.beds;
-}
+/**
+ * Beds belong to people.
+ *
+ * A survivor keeps the same bed night after night, which is both nicer to
+ * watch and stops the whole camp shuffling between bedrolls every evening.
+ * An unclaimed bed goes to whoever needs one first.
+ */
+export function claimBed(w: World, c: Character): Building | null {
+  const owned = c.sleepBuildingId >= 0 ? w.buildings.get(c.sleepBuildingId) : null;
+  if (owned && owned.state === 'built' && owned.owner === c.id) return owned;
 
-function findFreeBed(w: World, c: Character): Building | null {
   let best: Building | null = null;
   let bestScore = -Infinity;
   for (const b of w.buildings.values()) {
     if (b.state !== 'built') continue;
     const def = buildingDef(b.def);
     if (!def.beds) continue;
+    if (b.owner >= 0 && b.owner !== c.id) {
+      const holder = w.characters.find((o) => o.id === b.owner);
+      if (holder && holder.alive) continue;
+      b.owner = -1; // the owner is gone; the bed is free again
+    }
     if (b.users.filter((id) => id !== c.id).length >= def.beds) continue;
     const dx = buildingCenterX(b) - c.x;
     const dy = buildingCenterY(b) - c.y;
     const dist = Math.sqrt(dx * dx + dy * dy) / TILE;
-    const score = (def.comfort ?? 0) * 22 - dist * 0.7;
+    const score = (def.comfort ?? 0) * 30 - dist * 0.5 + (b.owner === c.id ? 100 : 0);
     if (score > bestScore) {
       bestScore = score;
       best = b;
     }
   }
+  if (best) best.owner = c.id;
   return best;
+}
+
+/** The tile a sleeper lies on — the middle of the bed, not its edge. */
+export function bedTile(b: Building): { tx: number; ty: number } {
+  return {
+    tx: b.tx + Math.floor((b.w - 1) / 2),
+    ty: b.ty + Math.floor((b.h - 1) / 2),
+  };
 }
 
 export function releaseBed(w: World, c: Character) {
   if (c.sleepBuildingId < 0) return;
   const b = w.buildings.get(c.sleepBuildingId);
   if (b) b.users = b.users.filter((id) => id !== c.id);
+  c.sleepComfort = 0;
+  // The claim survives — they come back to the same bed tomorrow night.
+}
+
+/** Give up a bed entirely (on death, or when it is taken down). */
+export function abandonBed(w: World, c: Character) {
+  const b = c.sleepBuildingId >= 0 ? w.buildings.get(c.sleepBuildingId) : null;
+  if (b) {
+    b.users = b.users.filter((id) => id !== c.id);
+    if (b.owner === c.id) b.owner = -1;
+  }
   c.sleepBuildingId = -1;
   c.sleepComfort = 0;
 }
@@ -490,18 +529,32 @@ export function releaseBed(w: World, c: Character) {
 function actSleep(w: World, c: Character, dt: number, ctx: Ctx) {
   const bed = c.sleepBuildingId >= 0 ? w.buildings.get(c.sleepBuildingId) : null;
   let target: { tx: number; ty: number } | null = null;
-  if (bed && bed.state === 'built') target = accessTile(w, bed);
-  else {
-    const fire = nearestBuilding(w, c.x, c.y, (b) => b.state === 'built' && !!buildingDef(b.def).light);
+  if (bed && bed.state === 'built') {
+    // Aim for the bed itself, so they are visibly lying in it.
+    const bt = bedTile(bed);
+    target = tileBlocked(w, bt.tx, bt.ty) ? accessTile(w, bed) : bt;
+  } else {
+    const fire = nearestBuilding(
+      w,
+      c.x,
+      c.y,
+      (b) => b.state === 'built' && !!buildingDef(b.def).light
+    );
     target = fire ? accessTile(w, fire) : { tx: w.campCenter.tx, ty: w.campCenter.ty };
   }
-  if (target && !isNear(c, target.tx, target.ty, 1.2)) {
+  if (target && !isNear(c, target.tx, target.ty, 0.6)) {
     c.state = 'moving';
     moveToward(w, c, target.tx, target.ty, dt, ctx, () => {
       c.sleepComfort = 0.12;
-      releaseBed(w, c);
+      abandonBed(w, c);
     });
     return;
+  }
+  if (target) {
+    // Settle exactly onto the bed so the sprite lines up with it.
+    const k = Math.min(1, dt * 6);
+    c.x += (tileToWorldX(target.tx) - c.x) * k;
+    c.y += (tileToWorldY(target.ty) - c.y) * k;
   }
   c.state = 'sleeping';
   c.moving = false;

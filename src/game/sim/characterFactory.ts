@@ -23,6 +23,7 @@ function rollStats(rng: RNG, tpl: SurvivorTemplate): Stats {
     v = clamp(v, 2, 9);
     s[id] = v;
   }
+  // Authored survivors are the same people every game; only their traits roll.
   if (tpl.fixedStats) {
     for (const k of Object.keys(tpl.fixedStats) as StatId[]) {
       s[k] = tpl.fixedStats[k]!;
@@ -64,15 +65,27 @@ function rollTraits(rng: RNG, tpl: SurvivorTemplate): string[] {
   return chosen;
 }
 
-function rollSkills(rng: RNG, stats: Stats, traits: string[]): Record<SkillId, Skill> {
+function rollSkills(
+  rng: RNG,
+  stats: Stats,
+  traits: string[],
+  start?: Partial<Record<SkillId, number>>
+): Record<SkillId, Skill> {
   const out = {} as Record<SkillId, Skill>;
   for (const id of SKILL_IDS) {
-    let lvl = rng.chance(0.35) ? rng.int(1, 4) : 0;
+    const lvl = rng.chance(0.3) ? rng.int(1, 3) : 0;
     out[id] = { level: lvl, xp: 0 };
   }
-  // Give everyone one thing they are visibly decent at.
-  const focus = SKILL_IDS[rng.int(0, SKILL_IDS.length)];
-  out[focus].level = Math.max(out[focus].level, rng.int(3, 6));
+  if (start) {
+    // Authored starting trades, so the camp begins with a cook and a scout
+    // rather than eight interchangeable labourers.
+    for (const k of Object.keys(start) as SkillId[]) {
+      if (out[k]) out[k].level = Math.max(out[k].level, start[k] ?? 0);
+    }
+  } else {
+    const focus = SKILL_IDS[rng.int(0, SKILL_IDS.length)];
+    out[focus].level = Math.max(out[focus].level, rng.int(3, 6));
+  }
 
   for (const t of traits) {
     const def = TRAIT_MAP[t];
@@ -120,6 +133,8 @@ export function createCharacter(
     const def = TRAIT_MAP[t];
     if (!def?.stats) continue;
     for (const k of Object.keys(def.stats) as StatId[]) {
+      // Authored stats are the character; traits nudge everything else.
+      if (tpl.fixedStats && tpl.fixedStats[k] !== undefined) continue;
       stats[k] = clamp(stats[k] + def.stats[k]!, 1, 10);
     }
   }
@@ -128,7 +143,7 @@ export function createCharacter(
       stats[k] = Math.max(stats[k], tpl.statFloor[k]!);
     }
   }
-  const skills = rollSkills(rng, stats, traits);
+  const skills = rollSkills(rng, stats, traits, tpl.startSkills);
 
   const c: Character = {
     id: init.id,
@@ -173,7 +188,8 @@ export function createCharacter(
     order: null,
 
     carrying: null,
-    equipment: { tool: null },
+    equipment: { tool: null, head: null, body: null },
+    assignment: 'auto',
 
     relationships: {},
     priorities: defaultPriorities(rng, skills),

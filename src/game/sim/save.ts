@@ -38,6 +38,7 @@ interface SavePayload {
   jobs: Job[];
   sites: ExplorationSite[];
   stock: World['stock'];
+  gear: Record<string, number>;
   log: World['log'];
   time: World['time'];
   weather: World['weather'];
@@ -67,6 +68,7 @@ export function serialize(w: World): SavePayload {
     jobs: Array.from(w.jobs.values()),
     sites: w.sites,
     stock: w.stock,
+    gear: w.gear,
     log: w.log.slice(-120),
     time: w.time,
     weather: w.weather,
@@ -114,6 +116,7 @@ export function deserialize(raw: any): World {
     jobs: new Map(),
     sites: data.sites,
     stock: { ...emptyStockpile(), ...data.stock },
+    gear: data.gear ?? {},
     log: data.log ?? [],
     time: data.time,
     weather: data.weather ?? { kind: 'clear', t: 300, intensity: 0 },
@@ -142,6 +145,7 @@ export function deserialize(raw: any): World {
     w.nodeAt[idx(w, node.tx, node.ty)] = node.id;
   }
   for (const b of data.buildings) {
+    b.owner = b.owner ?? -1;
     w.buildings.set(b.id, b);
     for (let y = b.ty; y < b.ty + b.h; y++) {
       for (let x = b.tx; x < b.tx + b.w; x++) {
@@ -169,7 +173,8 @@ export function deserialize(raw: any): World {
     c.sleepComfort = c.sleepComfort ?? 0;
     c.sleepBuildingId = c.sleepBuildingId ?? -1;
     c.relationships = c.relationships ?? {};
-    c.equipment = c.equipment ?? { tool: null };
+    c.equipment = Object.assign({ tool: null, head: null, body: null }, c.equipment ?? {});
+    c.assignment = c.assignment ?? 'auto';
   }
 
   recomputeAllBlocked(w);

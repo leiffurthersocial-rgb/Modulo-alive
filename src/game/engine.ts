@@ -33,7 +33,7 @@ import { createJob, deleteJob, hasJob, JOB_WORK } from './sim/jobs';
 import { canExplore, startExpedition } from './sim/exploration';
 import { AUTOSAVE_SLOT, loadGame, saveGame } from './sim/save';
 import { isUnlocked } from './sim/progression';
-import { releaseBed } from './sim/ai';
+import { abandonBed, releaseBed } from './sim/ai';
 
 export type Tool = 'select' | 'build' | 'mark' | 'unmark' | 'demolish';
 
@@ -960,9 +960,8 @@ export class GameEngine {
     for (const k of Object.keys(def.cost) as (keyof typeof w.stock)[]) {
       w.stock[k] += Math.floor((def.cost[k] ?? 0) * 0.5);
     }
-    for (const id of b.users) {
-      const c = w.characters.find((x) => x.id === id);
-      if (c) releaseBed(w, c);
+    for (const c of w.characters) {
+      if (c.sleepBuildingId === b.id) abandonBed(w, c);
     }
     for (const j of Array.from(w.jobs.values())) {
       if (j.targetId === b.id) deleteJob(w, j.id);

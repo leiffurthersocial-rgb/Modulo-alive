@@ -69,6 +69,7 @@ export function createWorld(seed = Math.floor(Math.random() * 0xffffffff)): Worl
     jobs: new Map(),
     sites: [],
     stock: emptyStockpile(),
+    gear: {},
     log: [],
     time: { t: 0, minutes: 7 * 60 },
     weather: { kind: 'clear', t: 600, intensity: 0 },

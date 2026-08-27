@@ -342,6 +342,15 @@ export function canPlace(
         return { ok: false, reason: 'Soil is too rocky to farm' };
     }
   }
+  if (d.maxCount !== undefined && countBuildings(w, defId) >= d.maxCount) {
+    return {
+      ok: false,
+      reason:
+        d.maxCount === 1
+          ? `The camp only needs one ${d.label}`
+          : `Limit reached — ${d.maxCount} ${d.label}`,
+    };
+  }
   if (d.requires) {
     for (const req of d.requires) {
       let found = false;
@@ -356,6 +365,13 @@ export function canPlace(
     }
   }
   return { ok: true, reason: '' };
+}
+
+/** How many of a structure exist, counting ones still under construction. */
+export function countBuildings(w: World, defId: string): number {
+  let n = 0;
+  for (const b of w.buildings.values()) if (b.def === defId) n++;
+  return n;
 }
 
 export function placeBuilding(
@@ -381,6 +397,7 @@ export function placeBuilding(
     hp: d.hp,
     maxHp: d.hp,
     users: [],
+    owner: -1,
     variant: rng.int(0, 4),
     activeT: 0,
   };

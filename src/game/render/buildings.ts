@@ -59,7 +59,7 @@ export function drawBuilding(
       break;
     case 'workshop':
       drawHouse(g, x, y, w, h, '#7f6647', '#4f4436', { door: true, awning: true });
-      drawWorkbench(g, x + 3, y + h - 16, w - 6, 14);
+      drawWorkbench(g, x + w * 0.18, y + h * 0.38, w * 0.64, h * 0.5);
       break;
     case 'well':
       drawWell(g, x, y, w, h);
@@ -432,19 +432,39 @@ function drawStockpile(
 }
 
 function drawWorkbench(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  drawShadow(g, x, y, w, h);
-  g.fillStyle = '#7d5c3a';
-  g.fillRect(x + 2, y + h * 0.35, w - 4, h * 0.28);
+  // Deliberately smaller than its footprint: a bench is a piece of furniture,
+  // not a building, and it needs room around it for the person using it.
+  const bw = w * 0.62;
+  const bh = h * 0.34;
+  const bx = x + (w - bw) / 2;
+  const by = y + h * 0.42;
+
+  g.fillStyle = 'rgba(0,0,0,0.2)';
+  g.fillRect(bx + 1, by + bh + 2, bw, 3);
+
+  // legs
   g.fillStyle = '#5f4429';
-  g.fillRect(x + 4, y + h * 0.6, 4, h * 0.35);
-  g.fillRect(x + w - 8, y + h * 0.6, 4, h * 0.35);
-  // tools on the bench
+  g.fillRect(bx + 1, by + bh - 1, 3, h * 0.2);
+  g.fillRect(bx + bw - 4, by + bh - 1, 3, h * 0.2);
+
+  // top
+  g.fillStyle = '#8a6642';
+  g.fillRect(bx, by, bw, bh);
+  g.fillStyle = '#a17d52';
+  g.fillRect(bx, by, bw, 2);
+  g.fillStyle = '#5f4429';
+  g.fillRect(bx, by + bh - 1, bw, 1);
+  g.strokeStyle = 'rgba(30,22,14,0.6)';
+  g.lineWidth = 1;
+  g.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+
+  // tools laid out on it
   g.fillStyle = '#b9b9c2';
-  g.fillRect(x + 6, y + h * 0.28, 8, 3);
+  g.fillRect(bx + 3, by - 2, 6, 2);
   g.fillStyle = '#4a3524';
-  g.fillRect(x + 13, y + h * 0.28, 6, 2);
+  g.fillRect(bx + 8, by - 2, 4, 1);
   g.fillStyle = '#c8a24a';
-  g.fillRect(x + w - 14, y + h * 0.26, 5, 5);
+  g.fillRect(bx + bw - 8, by - 3, 4, 3);
 }
 
 function drawWell(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
@@ -628,34 +648,94 @@ function drawWatchtower(
 
 function drawFarm(g: CanvasRenderingContext2D, b: Building, x: number, y: number) {
   if (!b.farm) return;
+  const fullW = b.w * TILE;
+  const fullH = b.h * TILE;
+
+  // A timber frame makes it obvious this is a managed plot, not bare dirt.
+  g.fillStyle = '#6b4c30';
+  g.fillRect(x, y, fullW, 3);
+  g.fillRect(x, y + fullH - 3, fullW, 3);
+  g.fillRect(x, y, 3, fullH);
+  g.fillRect(x + fullW - 3, y, 3, fullH);
+  g.fillStyle = '#8a6642';
+  g.fillRect(x, y, fullW, 1);
+  g.fillRect(x, y, 1, fullH);
+
   for (let i = 0; i < b.farm.length; i++) {
     const cell = b.farm[i];
     const cx = x + (i % b.w) * TILE;
     const cy = y + Math.floor(i / b.w) * TILE;
-    // soil bed
-    g.fillStyle = cell.tilled ? '#5b452e' : '#6a5741';
-    g.fillRect(cx + 1, cy + 1, TILE - 2, TILE - 2);
-    g.fillStyle = 'rgba(0,0,0,0.12)';
-    for (let r = 4; r < TILE - 2; r += 6) g.fillRect(cx + 2, cy + r, TILE - 4, 1);
-    if (!cell.crop) continue;
+    const ix = cx + 2;
+    const iy = cy + 2;
+    const iw = TILE - 4;
+    const ih = TILE - 4;
+
+    if (!cell.tilled) {
+      // Rough, unturned ground — clearly not ready.
+      g.fillStyle = '#6a5741';
+      g.fillRect(ix, iy, iw, ih);
+      g.fillStyle = '#7b6650';
+      for (let k = 0; k < 5; k++) {
+        g.fillRect(ix + ((k * 7 + i * 3) % (iw - 3)), iy + ((k * 5 + i * 2) % (ih - 3)), 3, 2);
+      }
+      continue;
+    }
+
+    // Tilled soil with visible furrows.
+    g.fillStyle = '#5b452e';
+    g.fillRect(ix, iy, iw, ih);
+    g.fillStyle = '#4a3826';
+    for (let r = 3; r < ih; r += 5) g.fillRect(ix, iy + r, iw, 1);
+
+    if (!cell.crop) {
+      // Empty but ready: a faint dashed outline reads as "waiting for seed".
+      g.strokeStyle = 'rgba(200,220,160,0.28)';
+      g.lineWidth = 1;
+      g.setLineDash([3, 3]);
+      g.strokeRect(ix + 1.5, iy + 1.5, iw - 3, ih - 3);
+      g.setLineDash([]);
+      continue;
+    }
+
     const crop = CROP_MAP[cell.crop];
     if (!crop) continue;
     const t = cell.growth;
-    const color = t >= 1 ? crop.colorRipe : crop.colorYoung;
-    const hgt = 3 + t * 11;
-    for (let s = 0; s < 3; s++) {
-      const sx = cx + 6 + s * 5;
+    const ripe = t >= 1;
+    const color = ripe ? crop.colorRipe : crop.colorYoung;
+    const hgt = 3 + t * 12;
+
+    for (let sIdx = 0; sIdx < 3; sIdx++) {
+      const sx = cx + 6 + sIdx * 5;
+      const baseY = cy + TILE - 4;
       g.fillStyle = color;
-      g.fillRect(sx, cy + TILE - 4 - hgt, 2, hgt);
-      if (t > 0.5) {
-        g.fillRect(sx - 2, cy + TILE - 4 - hgt, 6, 2);
+      g.fillRect(sx, baseY - hgt, 2, hgt);
+      if (t > 0.35) {
+        g.fillStyle = ripe ? crop.colorRipe : crop.colorYoung;
+        g.fillRect(sx - 2, baseY - hgt + 1, 6, 2);
       }
-      if (t >= 1) {
+      if (ripe) {
         g.fillStyle = crop.colorRipe;
         g.beginPath();
-        g.arc(sx + 1, cy + TILE - 5 - hgt, 2.4, 0, Math.PI * 2);
+        g.arc(sx + 1, baseY - hgt - 1, 2.4, 0, Math.PI * 2);
         g.fill();
       }
+    }
+
+    if (ripe) {
+      // Ripe beds get a bright corner marker so a full plot reads instantly.
+      g.fillStyle = '#ffe9a8';
+      g.beginPath();
+      g.moveTo(cx + TILE - 7, cy + 3);
+      g.lineTo(cx + TILE - 3, cy + 3);
+      g.lineTo(cx + TILE - 5, cy + 8);
+      g.closePath();
+      g.fill();
+    } else {
+      // Otherwise a thin growth bar along the bottom of the bed.
+      g.fillStyle = 'rgba(0,0,0,0.4)';
+      g.fillRect(ix, cy + TILE - 4, iw, 2);
+      g.fillStyle = crop.colorYoung;
+      g.fillRect(ix, cy + TILE - 4, iw * t, 2);
     }
   }
 }

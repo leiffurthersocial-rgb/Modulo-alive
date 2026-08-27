@@ -28,6 +28,7 @@ import {
 } from './world';
 import { addXp, carryCapacity, workSpeed, yieldMultiplier } from './modifiers';
 import { recipeAt } from './jobs';
+import { GEAR_MAP, GEAR_SLOTS } from '../data/gear';
 import type { Fx } from './fx';
 import { say } from './dialogue';
 import { adjustRelationship } from './relationships';
@@ -88,7 +89,7 @@ export function performWork(
   dt: number,
   fx: Fx
 ): WorkResult {
-  wearTool(w, c, dt, fx);
+  wearGear(w, c, dt, fx);
   const speed = workSpeed(c, j.work);
   const total = jobWorkAmount(w, j);
   const units = speed * dt * 2.2;
@@ -327,6 +328,7 @@ export function performWork(
         for (const k of Object.keys(r.output) as ResourceType[]) {
           addResource(w, k, r.output[k] ?? 0);
         }
+        if (r.gear) w.gear[r.gear] = (w.gear[r.gear] ?? 0) + 1;
         fx.float((b.tx + b.w / 2) * TILE, b.ty * TILE, r.label, '#bcd7ff');
         addXp(c, 'crafting', 9);
         return 'done';
@@ -389,13 +391,23 @@ export function performWork(
 }
 
 /** Food first: the fields only turn to fiber and medicine once the larder is safe. */
-/** Tools wear out with use — roughly one set per two and a half game days of work. */
-function wearTool(w: World, c: Character, dt: number, fx: Fx) {
-  if (!c.equipment.tool) return;
-  if (Math.random() > dt * 0.0006) return;
-  c.equipment.tool = null;
-  fx.float(c.x, c.y - 26, 'tools broke', '#ff9d7a');
-  log(w, 'info', 'Tools Broke', `${c.name}'s tools finally gave out mid-job.`, [c.id]);
+/**
+ * Gear wears out with use. Tools go first, clothing lasts much longer — but
+ * everything eventually needs replacing, which keeps the workbench useful.
+ */
+function wearGear(w: World, c: Character, dt: number, fx: Fx) {
+  for (const slot of GEAR_SLOTS) {
+    const id = c.equipment[slot];
+    if (!id) continue;
+    const def = GEAR_MAP[id];
+    if (!def || def.wear <= 0) continue;
+    if (Math.random() > dt * def.wear) continue;
+    c.equipment[slot] = null;
+    fx.float(c.x, c.y - 26, `${def.label.toLowerCase()} worn out`, '#ff9d7a');
+    log(w, 'info', 'Worn Out', `${c.name}'s ${def.label.toLowerCase()} finally gave out.`, [
+      c.id,
+    ]);
+  }
 }
 
 function chooseCrop(w: World) {

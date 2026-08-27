@@ -1,4 +1,4 @@
-import type { Appearance, StatId } from '../core/types';
+import type { Appearance, SkillId, StatId } from '../core/types';
 
 /**
  * The eight starting survivors.
@@ -20,7 +20,14 @@ export interface SurvivorTemplate {
   forcedTraits?: string[];
   /** Set these to switch a character from random to authored traits. */
   fixedTraits?: string[];
+  /**
+   * Authored stats. When present these are used verbatim — no rolling — so
+   * the starting eight are the same people in every game. Traits are still
+   * rolled per game; fill in `fixedTraits` to pin those too.
+   */
   fixedStats?: Partial<Record<StatId, number>>;
+  /** Starting skill levels, on top of a small random spread. */
+  startSkills?: Partial<Record<SkillId, number>>;
   blurb: string;
 }
 
@@ -33,6 +40,16 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
   {
     name: 'Robin',
     blurb: 'Steady hands, quiet mornings, always the first to notice a problem.',
+    fixedStats: {
+      strength: 5,
+      agility: 6,
+      intelligence: 7,
+      perception: 9,
+      endurance: 5,
+      charisma: 5,
+      luck: 6,
+    },
+    startSkills: { medicine: 3, scavenging: 3, construction: 2 },
     appearance: {
       skin: SKIN_LIGHT,
       hair: '#e3c15c',
@@ -57,8 +74,16 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
       trousers: '#3b3f52',
       facialHair: 'none',
     },
-    statBias: { strength: 3, endurance: 1 },
-    statFloor: { strength: 8 },
+    fixedStats: {
+      strength: 9,
+      agility: 5,
+      intelligence: 5,
+      perception: 5,
+      endurance: 7,
+      charisma: 5,
+      luck: 5,
+    },
+    startSkills: { woodcutting: 4, construction: 3 },
   },
   {
     name: 'Jovan',
@@ -73,8 +98,16 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
       trousers: '#3a3d4f',
       facialHair: 'none',
     },
-    statBias: { charisma: 4 },
-    statFloor: { charisma: 9 },
+    fixedStats: {
+      strength: 5,
+      agility: 7,
+      intelligence: 6,
+      perception: 6,
+      endurance: 5,
+      charisma: 10,
+      luck: 6,
+    },
+    startSkills: { cooking: 3, exploration: 3 },
   },
   {
     name: 'Leonidas',
@@ -89,8 +122,16 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
       trousers: '#40352c',
       facialHair: 'stubble',
     },
-    statBias: { strength: 3, endurance: 2, agility: -1 },
-    statFloor: { strength: 8 },
+    fixedStats: {
+      strength: 10,
+      agility: 3,
+      intelligence: 4,
+      perception: 4,
+      endurance: 8,
+      charisma: 4,
+      luck: 4,
+    },
+    startSkills: { woodcutting: 3, construction: 4 },
   },
   {
     name: 'Erim',
@@ -105,6 +146,16 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
       trousers: '#333747',
       facialHair: 'goatee',
     },
+    fixedStats: {
+      strength: 5,
+      agility: 5,
+      intelligence: 9,
+      perception: 6,
+      endurance: 5,
+      charisma: 6,
+      luck: 5,
+    },
+    startSkills: { cooking: 5, crafting: 3, medicine: 2 },
   },
   {
     name: 'Till',
@@ -119,6 +170,16 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
       trousers: '#4a4f63',
       facialHair: 'none',
     },
+    fixedStats: {
+      strength: 6,
+      agility: 5,
+      intelligence: 5,
+      perception: 5,
+      endurance: 10,
+      charisma: 5,
+      luck: 5,
+    },
+    startSkills: { farming: 4, construction: 3 },
   },
   {
     name: 'Lenni',
@@ -133,6 +194,16 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
       trousers: '#3d4152',
       facialHair: 'none',
     },
+    fixedStats: {
+      strength: 5,
+      agility: 9,
+      intelligence: 6,
+      perception: 8,
+      endurance: 6,
+      charisma: 5,
+      luck: 6,
+    },
+    startSkills: { exploration: 5, scavenging: 4 },
   },
   {
     name: 'Tusya',
@@ -147,6 +218,16 @@ export const STARTING_SURVIVORS: SurvivorTemplate[] = [
       trousers: '#38404d',
       facialHair: 'none',
     },
+    fixedStats: {
+      strength: 7,
+      agility: 6,
+      intelligence: 6,
+      perception: 6,
+      endurance: 7,
+      charisma: 5,
+      luck: 7,
+    },
+    startSkills: { farming: 3, woodcutting: 3, crafting: 3 },
   },
 ];
 
