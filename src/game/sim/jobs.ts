@@ -189,7 +189,7 @@ export function deleteJob(w: World, jobId: number) {
 /* Generation                                                          */
 /* ------------------------------------------------------------------ */
 
-export function generateJobs(w: World) {
+export function generateJobs(w: World, autoGather = true) {
   if (w.jobs.size >= MAX_JOBS) return;
 
   const index = new JobIndex(w);
@@ -453,7 +453,7 @@ export function generateJobs(w: World) {
     if (w.stock.fiber < 30 && forageCount(w, 'reeds') < 2) {
       autoNodeJob(w, index, 'forage', (n) => n.kind === 'reeds', 24);
     }
-    if (w.stock.wood < 90 && jobCount(w, 'chop') < 3 && food > pop * 5) {
+    if (autoGather && w.stock.wood < 45 && jobCount(w, 'chop') < 2 && food > pop * 5) {
       autoNodeJob(
         w,
         index,
@@ -462,7 +462,7 @@ export function generateJobs(w: World) {
         w.stock.wood < 25 ? 66 : 34
       );
     }
-    if (w.stock.stone < 80 && jobCount(w, 'mine') < 2 && food > pop * 5) {
+    if (autoGather && w.stock.stone < 30 && jobCount(w, 'mine') < 1 && food > pop * 5) {
       autoNodeJob(w, index, 'mine', (n) => n.kind === 'rock', w.stock.stone < 20 ? 62 : 34);
     }
   } else if (w.stock.stone < 20 && jobCount(w, 'mine') < 1 && food > pop * 5) {

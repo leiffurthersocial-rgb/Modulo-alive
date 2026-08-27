@@ -32,6 +32,10 @@ server-side state and no filesystem persistence.
 | `F` | Follow the selected survivor. `Tab` cycles survivors. |
 | `Esc` | Cancel the current tool, then open the menu. |
 
+On a tablet everything is reachable by touch: drag to pan, pinch to zoom, tap to
+select, and the **Order** button (or a long press) to command the selection.
+Every tool has a **Cancel** button — nothing requires a keyboard.
+
 Work priorities in a survivor's panel decide what they choose to do on their own.
 Zero stars means they will never take that kind of job.
 
@@ -99,9 +103,11 @@ npm run simtest:idle    # 12 days with zero player input — the baseline diffic
 
 A few things were built to be replaced rather than rewritten:
 
-- **Fixed character traits.** `data/survivors.ts` rolls traits per new game. Fill in
-  `fixedTraits` / `fixedStats` on a template and that survivor stops being random —
-  nothing else changes.
+- **Fixed character traits.** The starting eight already have authored `fixedStats`
+  and `startSkills` in `data/survivors.ts`, so they are the same people every game.
+  Traits are still rolled; fill in `fixedTraits` on a template to pin those too.
+- **New gear.** `data/gear.ts` is the single source for equipment: adding an entry
+  makes it craftable at the workbench, wearable, and drawn on the sprite.
 - **Seasons.** `sim/time.ts` already derives day, week, season and year from the
   clock, and every crop carries `plantSeasons` and `seasonYield`. The seasonal yield
   multiplier is live; strict seasonal planting is a condition in `jobs.ts`.

@@ -453,16 +453,21 @@ export function storeCarried(w: World, c: Character, fx: Fx): boolean {
   const lost = c.carrying.amount - stored;
   if (stored > 0) fx.float(c.x, c.y - 20, `${RESOURCE_LABEL[res]} stored`, '#cfe8ff');
   if (lost > 0) {
-    say(w, c, 'storageFull');
     fx.float(c.x, c.y - 32, `${Math.round(lost)} wasted`, '#ff9d7a');
-    if (!recentlyLogged(w, 'Storage Full', 240)) {
-      log(
-        w,
-        'alert',
-        'Storage Full',
-        'There is nowhere left to put anything. Supplies are being left to rot — the settlement needs more storage.',
-        []
-      );
+    // Only shout about it when the stores are genuinely full. Hitting the
+    // per-resource ceiling just means the camp already has plenty of that one.
+    const reallyFull = storedTotal(w) >= storageCapacity(w) * 0.95;
+    if (reallyFull) {
+      say(w, c, 'storageFull');
+      if (!recentlyLogged(w, 'Storage Full', 480)) {
+        log(
+          w,
+          'alert',
+          'Storage Full',
+          'There is nowhere left to put anything. Supplies are being left to rot — the settlement needs more storage.',
+          []
+        );
+      }
     }
   }
   c.carrying = null;

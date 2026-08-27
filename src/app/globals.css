@@ -304,34 +304,73 @@ h4 {
 }
 
 /* ------------------------------------------------------------------ */
-/* Rails                                                               */
+/* HUD grid                                                            */
+/*                                                                     */
+/* Every panel lives in its own grid column, so two panels can never    */
+/* end up on top of one another — opening a second one narrows the      */
+/* view of the world instead.                                          */
 /* ------------------------------------------------------------------ */
 
-.left-rail {
+.hud {
   position: absolute;
-  left: 8px;
-  top: 58px;
-  bottom: 84px;
-  width: 202px;
-  overflow-y: auto;
+  top: 50px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: auto auto minmax(120px, 1fr) auto auto;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'roster inspect world build rail'
+    'dock   dock    dock  dock  dock';
+  gap: 8px;
+  padding: 8px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
   z-index: 15;
-  scrollbar-width: thin;
 }
 
-.right-rail {
-  position: absolute;
-  right: 8px;
-  top: 58px;
-  bottom: 12px;
-  width: 300px;
+.hud-cell {
+  pointer-events: auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 15;
 }
+
+.hud-world {
+  grid-area: world;
+  pointer-events: none;
+}
+
+.hud-dock {
+  grid-area: dock;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.hud-dock > * {
+  pointer-events: auto;
+}
+
+.rail-roster {
+  grid-area: roster;
+  width: 202px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.rail-right {
+  grid-area: rail;
+  width: 300px;
+}
+
 .rail-tabs {
   display: flex;
   gap: 4px;
+  flex: 0 0 auto;
 }
 .rail-body {
   flex: 1;
@@ -457,19 +496,17 @@ h4 {
 /* ------------------------------------------------------------------ */
 
 .inspector {
-  position: absolute;
-  left: 218px;
-  bottom: 84px;
+  grid-area: inspect;
+  position: relative;
   width: 344px;
-  max-height: calc(100vh - 160px);
   overflow-y: auto;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 12px;
   box-shadow: var(--shadow);
-  z-index: 16;
   scrollbar-width: thin;
+  display: block;
 }
 
 .inspector-close {
@@ -802,14 +839,6 @@ h4 {
 /* Bottom dock & build menu                                            */
 /* ------------------------------------------------------------------ */
 
-.bottom-dock {
-  position: absolute;
-  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 18;
-  max-width: calc(100vw - 16px);
-}
 .toolbar {
   display: flex;
   gap: 5px;
@@ -874,12 +903,8 @@ h4 {
 }
 
 .build-dock {
-  position: absolute;
-  right: 316px;
-  top: 58px;
-  bottom: 84px;
+  grid-area: build;
   width: 320px;
-  z-index: 17;
 }
 .build-menu {
   height: 100%;
@@ -1198,10 +1223,6 @@ h4 {
 }
 
 .tool-banner {
-  position: absolute;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1211,7 +1232,6 @@ h4 {
   border: 1px solid var(--accent);
   color: var(--accent);
   font-size: 12.5px;
-  z-index: 19;
   max-width: min(90vw, 560px);
   text-align: center;
 }
@@ -1332,6 +1352,168 @@ h4 {
   color: var(--text);
 }
 
+/* Settlement overview alerts */
+.alert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.alert-list li {
+  font-size: 11.5px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  border-left: 3px solid var(--warn);
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--warn);
+}
+.alert-list .alert-bad {
+  border-left-color: var(--danger);
+  color: #f0a99c;
+}
+.work-list .idle-row {
+  color: var(--warn);
+}
+
+/* Assignment picker */
+.assign-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.assign {
+  padding: 6px 4px;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.assign:hover {
+  border-color: var(--line);
+  color: var(--text);
+}
+.assign.on {
+  background: linear-gradient(#6b5a24, #4d4119);
+  border-color: var(--accent);
+  color: #fdf3d5;
+}
+.assign.rest.on {
+  background: linear-gradient(#4a3630, #38241f);
+  border-color: #a5644f;
+  color: #f0c0ad;
+}
+.tag-pin {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Equipment */
+.gear-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gear-row {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 2px 8px;
+  padding: 5px 7px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.25);
+  border-left: 3px solid var(--line-soft);
+}
+.gear-row.worn {
+  border-left-color: var(--accent-2);
+}
+.gear-slot {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  align-self: center;
+}
+.gear-name {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.gear-desc {
+  grid-column: 2;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+/* Settings */
+.menu-settings h4 {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 16px 0 7px;
+}
+.menu-settings .btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 6px;
+}
+.setting-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 11px;
+  margin-bottom: 6px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.setting-row:hover {
+  border-color: var(--line);
+}
+.setting-row.on {
+  border-color: var(--accent-2);
+}
+.setting-check {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--accent-2);
+  background: rgba(0, 0, 0, 0.3);
+}
+.setting-row.on .setting-check {
+  border-color: var(--accent-2);
+}
+.setting-text strong {
+  display: block;
+  font-size: 13px;
+}
+.setting-text em {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.45;
+  margin-top: 2px;
+}
+
+.at-limit {
+  color: var(--danger);
+}
+
 /* ------------------------------------------------------------------ */
 /* Scrollbars                                                          */
 /* ------------------------------------------------------------------ */
@@ -1403,46 +1585,27 @@ h4 {
   }
 }
 
-/* Tablet and below: the rails float over the world and can be closed. */
-.game-root.compact .left-rail {
-  top: 56px;
-  bottom: auto;
-  max-height: calc(100vh - 170px);
-  background: rgba(12, 16, 10, 0.72);
-  border-radius: var(--radius);
-  padding: 4px;
-  backdrop-filter: blur(3px);
+/* Tablet and below: panels get narrower rather than stacking on top of
+   each other, and the roster/chronicle default to closed. */
+.game-root.compact .rail-roster {
+  width: 172px;
 }
-.game-root.compact .right-rail {
-  z-index: 16;
-  background: rgba(12, 16, 10, 0.72);
-  border-radius: var(--radius);
-  padding: 4px;
-  backdrop-filter: blur(3px);
+.game-root.compact .rail-right {
+  width: 250px;
 }
 .game-root.compact .inspector {
-  left: 8px;
-  right: 8px;
-  bottom: calc(78px + env(safe-area-inset-bottom, 0px));
-  width: auto;
-  max-width: 420px;
-  max-height: 46vh;
+  width: 292px;
+  padding: 10px;
 }
 .game-root.compact .build-dock {
-  top: auto;
-  right: 8px;
-  bottom: calc(78px + env(safe-area-inset-bottom, 0px));
-  width: min(320px, calc(100vw - 16px));
-  height: min(56vh, 460px);
+  width: 268px;
+}
+.game-root.compact .hud {
+  gap: 6px;
+  padding: 6px;
 }
 
 @media (max-width: 1080px) {
-  .left-rail {
-    width: 182px;
-  }
-  .right-rail {
-    width: 262px;
-  }
   .phase-text {
     display: none;
   }
@@ -1467,12 +1630,6 @@ h4 {
   .res-val {
     font-size: 12px;
   }
-  .left-rail {
-    width: 164px;
-  }
-  .right-rail {
-    width: 232px;
-  }
   .clock-time {
     font-size: 15px;
   }
@@ -1484,11 +1641,35 @@ h4 {
   }
 }
 
-@media (max-height: 560px) {
-  .game-root.compact .inspector {
-    max-height: 62vh;
-  }
+@media (max-height: 620px) {
   .minimap {
     display: none;
+  }
+  .tool-label {
+    display: none;
+  }
+  .tool {
+    min-width: 46px;
+    min-height: 40px;
+  }
+}
+
+/* Very narrow: the world keeps priority, panels cap to a share of the width. */
+@media (max-width: 760px) {
+  .rail-roster,
+  .game-root.compact .rail-roster {
+    width: min(150px, 28vw);
+  }
+  .rail-right,
+  .game-root.compact .rail-right {
+    width: min(230px, 42vw);
+  }
+  .inspector,
+  .game-root.compact .inspector {
+    width: min(280px, 52vw);
+  }
+  .build-dock,
+  .game-root.compact .build-dock {
+    width: min(250px, 46vw);
   }
 }

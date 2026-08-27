@@ -1,5 +1,7 @@
 import {
   TILE,
+  WORK_TYPES,
+  type Assignment,
   type Building,
   type Character,
   type ExplorationSite,
@@ -71,6 +73,14 @@ export class GameEngine {
   notices: Notice[] = [];
   followId = -1;
 
+  /** Player preferences. Not part of the world, so they survive a new game. */
+  settings = {
+    autosave: true,
+    speechBubbles: true,
+    autoGather: true,
+    pauseOnDeath: false,
+  };
+
   private listeners = new Set<() => void>();
   private version = 0;
   private rafId = 0;
@@ -88,6 +98,7 @@ export class GameEngine {
   private longPress: ReturnType<typeof setTimeout> | null = null;
   private suppressTap = false;
   private nextNoticeId = 1;
+  private lastDeathCount = 0;
   private rng = new RNG(12345);
 
   constructor(world?: World) {
@@ -206,7 +217,7 @@ export class GameEngine {
   /* ---------------------------------------------------------------- */
 
   private frame(dtReal: number) {
-    const ctx: Ctx = { pf: this.pf, fx: this.fx };
+    const ctx: Ctx = { pf: this.pf, fx: this.fx, autoGather: this.settings.autoGather };
 
     this.handleKeyboardPan(dtReal);
 
@@ -220,11 +231,28 @@ export class GameEngine {
       }
       if (this.accumulator > SIM_STEP * 24) this.accumulator = 0;
 
-      this.autosaveAcc += dtReal * this.speed;
-      if (this.autosaveAcc >= AUTOSAVE_INTERVAL) {
-        this.autosaveAcc = 0;
-        if (saveGame(this.world, AUTOSAVE_SLOT)) this.notice('Autosaved', 'info');
+      if (this.settings.autosave) {
+        this.autosaveAcc += dtReal * this.speed;
+        if (this.autosaveAcc >= AUTOSAVE_INTERVAL) {
+          this.autosaveAcc = 0;
+          if (saveGame(this.world, AUTOSAVE_SLOT)) this.notice('Autosaved', 'info');
+        }
       }
+    }
+
+    if (this.settings.pauseOnDeath) {
+      const deaths = this.world.stats.deaths;
+      if (deaths > this.lastDeathCount) {
+        this.lastDeathCount = deaths;
+        if (this.speed > 0) {
+          this.setSpeed(0);
+          this.notice('A survivor has died', 'warn');
+        }
+      } else if (deaths < this.lastDeathCount) {
+        this.lastDeathCount = deaths;
+      }
+    } else {
+      this.lastDeathCount = this.world.stats.deaths;
     }
 
     this.fx.update(dtReal);
@@ -240,6 +268,7 @@ export class GameEngine {
 
     if (this.renderer) {
       const opts: RenderOptions = {
+        showSpeech: this.settings.speechBubbles,
         selectedIds: this.selected,
         hoverTile: this.tool === 'select' ? null : this.hoverTile,
         buildPreview: this.buildPreview(),
@@ -607,8 +636,21 @@ export class GameEngine {
 
   /** Zoom buttons for touch, where there is no wheel. */
   zoomStep(dir: number) {
-    this.cam.applyZoom(this.cam.viewW / 2, this.cam.viewH / 2, dir > 0 ? 1.25 : 0.8);
+    this.cam.applyZoom(this.cam.centerX, this.cam.centerY, dir > 0 ? 1.25 : 0.8);
     this.emit();
+  }
+
+  /** Tell the camera how much of the canvas the HUD is covering. */
+  setHudInsets(left: number, right: number, top: number, bottom: number) {
+    const c = this.cam;
+    if (
+      c.insetLeft === left &&
+      c.insetRight === right &&
+      c.insetTop === top &&
+      c.insetBottom === bottom
+    )
+      return;
+    c.setInsets(left, right, top, bottom);
   }
 
   wheel(e: WheelEvent, rect: DOMRect) {
@@ -1039,6 +1081,73 @@ export class GameEngine {
   }
 
   /* -------- survivor management -------- */
+
+  /** Pin a survivor to one kind of work, let them choose, or stand them down. */
+  setAssignment(charId: number, assignment: Assignment) {
+    const c = this.world.characters.find((x) => x.id === charId);
+    if (!c) return;
+    c.assignment = assignment;
+    if (c.jobId >= 0) {
+      const j = this.world.jobs.get(c.jobId);
+      // Drop work that no longer matches the new assignment.
+      if (j && (assignment === 'rest' || (assignment !== 'auto' && j.work !== assignment))) {
+        j.assigned = -1;
+        c.jobId = -1;
+        c.activity = 'idle';
+      }
+    }
+    c.thinkT = 0;
+    this.emit();
+  }
+
+  /** Put every survivor back on automatic work selection. */
+  resetAssignments() {
+    for (const c of this.world.characters) {
+      if (!c.alive) continue;
+      c.assignment = 'auto';
+      c.workEnabled = true;
+      c.thinkT = 0;
+    }
+    this.notice('Everyone back on automatic work', 'good');
+  }
+
+  /** Restore every survivor's work priorities to the defaults. */
+  resetPriorities() {
+    for (const c of this.world.characters) {
+      if (!c.alive) continue;
+      for (const wt of WORK_TYPES) c.priorities[wt] = 3;
+      c.priorities.medicine = c.skills.medicine.level >= 3 ? 4 : 2;
+      c.priorities.cooking = c.skills.cooking.level >= 3 ? 4 : 2;
+      c.priorities.crafting = c.skills.crafting.level >= 3 ? 4 : 2;
+      c.thinkT = 0;
+    }
+    this.notice('Work priorities reset', 'good');
+  }
+
+  /** Clear every outstanding clearing mark in the world. */
+  clearAllMarks() {
+    let n = 0;
+    for (const node of this.world.nodes.values()) {
+      if (!node.marked) continue;
+      node.marked = false;
+      n++;
+    }
+    for (const j of Array.from(this.world.jobs.values())) {
+      if (j.targetKind === 'node' && j.assigned < 0) deleteJob(this.world, j.id);
+    }
+    this.notice(n ? `${n} clearing marks removed` : 'Nothing was marked', 'info');
+  }
+
+  /** Cancel every blueprint that has not been started. */
+  cancelAllBlueprints() {
+    let n = 0;
+    for (const b of Array.from(this.world.buildings.values())) {
+      if (b.state !== 'blueprint') continue;
+      this.cancelBlueprint(b);
+      n++;
+    }
+    this.notice(n ? `${n} blueprints cancelled` : 'No blueprints pending', 'info');
+  }
 
   setPriority(charId: number, work: string, value: number) {
     const c = this.world.characters.find((x) => x.id === charId);

@@ -11,6 +11,14 @@ export class Camera {
   maxZoom = 3.2;
   viewW = 800;
   viewH = 600;
+  /**
+   * How much of each edge the HUD covers. The canvas spans the whole window,
+   * so without this the camera would centre the world behind a side panel.
+   */
+  insetLeft = 0;
+  insetRight = 0;
+  insetTop = 0;
+  insetBottom = 0;
   worldW = 0;
   worldH = 0;
   shakeX = 0;
@@ -24,6 +32,23 @@ export class Camera {
   setViewport(w: number, h: number) {
     this.viewW = w;
     this.viewH = h;
+  }
+
+  setInsets(left: number, right: number, top: number, bottom: number) {
+    this.insetLeft = left;
+    this.insetRight = right;
+    this.insetTop = top;
+    this.insetBottom = bottom;
+    this.clampToWorld();
+  }
+
+  /** Screen-space centre of the part of the canvas the player can actually see. */
+  get centerX() {
+    return this.insetLeft + (this.viewW - this.insetLeft - this.insetRight) / 2;
+  }
+
+  get centerY() {
+    return this.insetTop + (this.viewH - this.insetTop - this.insetBottom) / 2;
   }
 
   centerOn(x: number, y: number) {
@@ -73,6 +98,7 @@ export class Camera {
     const halfW = this.viewW / (2 * this.zoom);
     const halfH = this.viewH / (2 * this.zoom);
     if (this.worldW <= 0) return;
+    if (this.worldW <= 0) return;
     if (this.worldW < halfW * 2) this.x = this.worldW / 2;
     else this.x = clamp(this.x, halfW, this.worldW - halfW);
     if (this.worldH < halfH * 2) this.y = this.worldH / 2;
@@ -81,27 +107,34 @@ export class Camera {
 
   screenToWorld(sx: number, sy: number) {
     return {
-      x: (sx - this.viewW / 2) / this.zoom + this.x,
-      y: (sy - this.viewH / 2) / this.zoom + this.y,
+      x: (sx - this.centerX) / this.zoom + this.x,
+      y: (sy - this.centerY) / this.zoom + this.y,
     };
   }
 
   worldToScreen(wx: number, wy: number) {
     return {
-      x: (wx - this.x) * this.zoom + this.viewW / 2,
-      y: (wy - this.y) * this.zoom + this.viewH / 2,
+      x: (wx - this.x) * this.zoom + this.centerX,
+      y: (wy - this.y) * this.zoom + this.centerY,
     };
   }
 
   /** Visible world-space rectangle, padded for sprites that overhang. */
   bounds(pad = 64) {
-    const halfW = this.viewW / (2 * this.zoom);
-    const halfH = this.viewH / (2 * this.zoom);
+    const tl = this.screenToWorld(0, 0);
+    const br = this.screenToWorld(this.viewW, this.viewH);
     return {
-      x0: this.x - halfW - pad,
-      y0: this.y - halfH - pad,
-      x1: this.x + halfW + pad,
-      y1: this.y + halfH + pad,
+      x0: tl.x - pad,
+      y0: tl.y - pad,
+      x1: br.x + pad,
+      y1: br.y + pad,
     };
+  }
+
+  /** The visible world rectangle, excluding whatever the HUD covers. */
+  visibleBounds() {
+    const tl = this.screenToWorld(this.insetLeft, this.insetTop);
+    const br = this.screenToWorld(this.viewW - this.insetRight, this.viewH - this.insetBottom);
+    return { x0: tl.x, y0: tl.y, x1: br.x, y1: br.y };
   }
 }

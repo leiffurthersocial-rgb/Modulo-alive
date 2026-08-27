@@ -21,6 +21,7 @@ import { relationshipLabel } from '@/game/sim/relationships';
 import { injurySummary } from '@/game/sim/medical';
 import { xpForLevel } from '@/game/sim/modifiers';
 import { STARTING_SURVIVORS } from '@/game/data/survivors';
+import { GEAR_MAP, GEAR_SLOTS, SLOT_LABEL } from '@/game/data/gear';
 
 type Tab = 'overview' | 'skills' | 'work' | 'social';
 
@@ -43,6 +44,11 @@ export default function CharacterPanel({ character }: { character: Character }) 
             <h2>{c.name}</h2>
             {!c.alive && <span className="tag tag-dead">Dead — day {c.deathDay}</span>}
             {c.state === 'downed' && <span className="tag tag-bad">Incapacitated</span>}
+            {c.alive && c.assignment !== 'auto' && (
+              <span className="tag tag-pin">
+                {c.assignment === 'rest' ? 'Off duty' : WORK_LABEL[c.assignment]}
+              </span>
+            )}
           </div>
           <div className="char-activity">{activity}</div>
           {job && (
@@ -145,9 +151,24 @@ export default function CharacterPanel({ character }: { character: Character }) 
               ? `${Math.round(c.carrying.amount)} × ${RESOURCE_LABEL[c.carrying.res]}`
               : 'Nothing'}
           </div>
-          <div className="carry">
-            Equipment: {c.equipment.tool ? 'Tool set (+20% work speed)' : 'Bare hands'}
+
+          <h3 className="sub">Equipment</h3>
+          <div className="gear-list">
+            {GEAR_SLOTS.map((slot) => {
+              const id = c.equipment[slot];
+              const def = id ? GEAR_MAP[id] : null;
+              return (
+                <div key={slot} className={`gear-row ${def ? 'worn' : ''}`}>
+                  <span className="gear-slot">{SLOT_LABEL[slot]}</span>
+                  <span className="gear-name">{def ? def.label : '—'}</span>
+                  <span className="gear-desc">{def ? def.desc : 'Nothing worn'}</span>
+                </div>
+              );
+            })}
           </div>
+          <p className="hint">
+            Gear is made at a workbench and picked up automatically when a survivor starts work.
+          </p>
         </div>
       )}
 
@@ -171,9 +192,41 @@ export default function CharacterPanel({ character }: { character: Character }) 
 
       {tab === 'work' && (
         <div className="tab-body">
+          <h3 className="sub">Assignment</h3>
           <p className="hint">
-            Higher priority means this survivor picks that kind of work first. Zero stars means
-            they never do it.
+            <b>Auto</b> lets them pick sensible work on their own, avoiding jobs other survivors
+            already have covered. Pinning them to one kind of work means they do only that.
+          </p>
+          <div className="assign-grid">
+            <button
+              className={`assign ${c.assignment === 'auto' ? 'on' : ''}`}
+              onClick={() => engine.setAssignment(c.id, 'auto')}
+            >
+              Auto
+            </button>
+            {WORK_TYPES.map((wt) => (
+              <button
+                key={wt}
+                className={`assign ${c.assignment === wt ? 'on' : ''}`}
+                onClick={() => engine.setAssignment(c.id, wt)}
+                title={`Only ${WORK_LABEL[wt].toLowerCase()}`}
+              >
+                {WORK_LABEL[wt]}
+              </button>
+            ))}
+            <button
+              className={`assign rest ${c.assignment === 'rest' ? 'on' : ''}`}
+              onClick={() => engine.setAssignment(c.id, 'rest')}
+              title="Take them off work entirely"
+            >
+              Off duty
+            </button>
+          </div>
+
+          <h3 className="sub">Priorities</h3>
+          <p className="hint">
+            Used when this survivor is on <b>Auto</b>. Higher means they pick that work first;
+            zero stars means never.
           </p>
           {WORK_TYPES.map((wt) => (
             <div key={wt} className="prio-row">

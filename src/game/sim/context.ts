@@ -12,4 +12,9 @@ export interface Ctx {
    * character re-counting the whole camp.
    */
   coverage?: Record<WorkType, number>;
+  /**
+   * When false the camp only gathers what it needs to stay alive, leaving the
+   * rest of the woodcutting and mining for the player to direct.
+   */
+  autoGather?: boolean;
 }

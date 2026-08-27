@@ -80,6 +80,49 @@ export default function GameShell() {
     if (!buildOpen && engine.tool === 'build') engine.setTool('select');
   }, [buildOpen, engine]);
 
+  // Panels sit side by side, so on anything short of a wide desktop there is
+  // not room for all of them at once. Opening the build menu makes room by
+  // folding the side rails away rather than covering the world.
+  useEffect(() => {
+    if (!buildOpen) return;
+    if (window.innerWidth >= 1500) return;
+    setRosterOpen(false);
+    setLogOpen(false);
+  }, [buildOpen]);
+
+  // Measure how much of the canvas the HUD covers, so the camera can keep the
+  // world centred in the gap between the panels rather than behind them.
+  useEffect(() => {
+    if (!started) return;
+    const measure = () => {
+      const width = (sel: string) => {
+        const el = document.querySelector(sel) as HTMLElement | null;
+        if (!el) return 0;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 ? r.width + 8 : 0;
+      };
+      const height = (sel: string) => {
+        const el = document.querySelector(sel) as HTMLElement | null;
+        if (!el) return 0;
+        const r = el.getBoundingClientRect();
+        return r.height > 0 ? r.height + 8 : 0;
+      };
+      engine.setHudInsets(
+        width('.rail-roster') + width('.inspector'),
+        width('.build-dock') + width('.rail-right'),
+        height('.topbar'),
+        height('.hud-dock')
+      );
+    };
+    measure();
+    const id = window.setInterval(measure, 400);
+    window.addEventListener('resize', measure);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener('resize', measure);
+    };
+  }, [started, engine, rosterOpen, logOpen, buildOpen, compact]);
+
   const w = engine.world;
   const selectedChar =
     engine.selected.length > 0
@@ -105,25 +148,6 @@ export default function GameShell() {
       <div className="viewport">
         <GameCanvas />
         <Notices />
-        {started && (toolActive || engine.orderMode) && (
-          <div className="tool-banner">
-            <span>
-              {toolActive
-                ? toolText
-                : 'Order mode — tap the world to command the selected survivors'}
-            </span>
-            <button
-              className="btn btn-cancel"
-              onClick={() => {
-                engine.setOrderMode(false);
-                engine.setTool('select');
-                setBuildOpen(false);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        )}
       </div>
 
       {started && (
@@ -137,68 +161,98 @@ export default function GameShell() {
             onToggleLog={() => setLogOpen((v) => !v)}
           />
 
-          {rosterOpen && (
-            <aside className="left-rail">
-              <CharacterList />
-            </aside>
-          )}
+          {/*
+            The HUD is a grid, not a stack of floating boxes: every panel gets
+            its own column, so opening two at once squeezes the view rather
+            than covering another panel.
+          */}
+          <div className="hud">
+            {rosterOpen && (
+              <aside className="hud-cell rail-roster">
+                <CharacterList />
+              </aside>
+            )}
 
-          {logOpen && (
-            <aside className="right-rail">
-              <div className="rail-tabs">
+            {(selectedChar || selectedBuilding) && (
+              <section className="hud-cell inspector">
                 <button
-                  className={`tab ${rightTab === 'log' ? 'active' : ''}`}
-                  onClick={() => setRightTab('log')}
+                  className="btn btn-icon inspector-close"
+                  onClick={() => {
+                    engine.selected = [];
+                    engine.selectedBuildingId = -1;
+                    engine.emit();
+                  }}
+                  title="Close"
                 >
-                  Chronicle
+                  ✕
                 </button>
-                <button
-                  className={`tab ${rightTab === 'goals' ? 'active' : ''}`}
-                  onClick={() => setRightTab('goals')}
-                >
-                  Settlement
-                </button>
-              </div>
-              <div className="rail-body">{rightTab === 'log' ? <EventLog /> : <Objectives />}</div>
-              <Minimap />
-            </aside>
-          )}
+                {selectedChar ? (
+                  <CharacterPanel character={selectedChar} />
+                ) : (
+                  selectedBuilding && <BuildingPanel building={selectedBuilding} />
+                )}
+              </section>
+            )}
 
-          <div className="bottom-dock">
-            <Toolbar buildOpen={buildOpen} onToggleBuild={() => setBuildOpen((b) => !b)} />
-          </div>
+            <div className="hud-world" />
 
-          {buildOpen && (
-            <div className="build-dock">
-              <BuildMenu
-                onClose={() => {
-                  setBuildOpen(false);
-                  engine.setTool('select');
-                }}
-              />
-            </div>
-          )}
+            {buildOpen && (
+              <section className="hud-cell build-dock">
+                <BuildMenu
+                  onClose={() => {
+                    setBuildOpen(false);
+                    engine.setTool('select');
+                  }}
+                />
+              </section>
+            )}
 
-          {(selectedChar || selectedBuilding) && (
-            <div className="inspector">
-              <button
-                className="btn btn-icon inspector-close"
-                onClick={() => {
-                  engine.selected = [];
-                  engine.selectedBuildingId = -1;
-                  engine.emit();
-                }}
-                title="Close"
-              >
-                ✕
-              </button>
-              {selectedChar ? (
-                <CharacterPanel character={selectedChar} />
-              ) : (
-                selectedBuilding && <BuildingPanel building={selectedBuilding} />
+            {logOpen && (
+              <aside className="hud-cell rail-right">
+                <div className="rail-tabs">
+                  <button
+                    className={`tab ${rightTab === 'log' ? 'active' : ''}`}
+                    onClick={() => setRightTab('log')}
+                  >
+                    Chronicle
+                  </button>
+                  <button
+                    className={`tab ${rightTab === 'goals' ? 'active' : ''}`}
+                    onClick={() => setRightTab('goals')}
+                  >
+                    Settlement
+                  </button>
+                </div>
+                <div className="rail-body">
+                  {rightTab === 'log' ? <EventLog /> : <Objectives />}
+                </div>
+                <Minimap />
+              </aside>
+            )}
+
+            <div className="hud-dock">
+              {(toolActive || engine.orderMode) && (
+                <div className="tool-banner">
+                  <span>
+                    {toolActive
+                      ? toolText
+                      : 'Order mode — tap the world to command the selected survivors'}
+                  </span>
+                  <button
+                    className="btn btn-cancel"
+                    onClick={() => {
+                      engine.setOrderMode(false);
+                      engine.setTool('select');
+                      setBuildOpen(false);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
               )}
+              <Toolbar buildOpen={buildOpen} onToggleBuild={() => setBuildOpen((b) => !b)} />
             </div>
-          )}
+          </div>
         </>
       )}
 

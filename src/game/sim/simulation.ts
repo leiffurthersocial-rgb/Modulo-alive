@@ -73,7 +73,7 @@ export function stepWorld(w: World, dt: number, ctx: Ctx) {
 
   w.acc.jobs += dt;
   if (w.acc.jobs >= JOB_INTERVAL) {
-    generateJobs(w);
+    generateJobs(w, ctx.autoGather !== false);
     pruneJobs(w);
     w.acc.jobs = 0;
   }

@@ -10,6 +10,7 @@ import {
 } from '@/game/data/buildings';
 import { RESOURCE_LABEL, type ResourceType } from '@/game/core/types';
 import { isUnlocked } from '@/game/sim/progression';
+import { countBuildings } from '@/game/sim/world';
 
 export default function BuildMenu({ onClose }: { onClose: () => void }) {
   const engine = useEngine();
@@ -46,6 +47,8 @@ export default function BuildMenu({ onClose }: { onClose: () => void }) {
       <div className="build-list">
         {inCat.map((def) => {
           const unlocked = isUnlocked(w, def.id);
+          const built = countBuildings(w, def.id);
+          const atLimit = def.maxCount !== undefined && built >= def.maxCount;
           const affordable = (Object.keys(def.cost) as ResourceType[]).every(
             (k) => w.stock[k] >= (def.cost[k] ?? 0)
           );
@@ -53,19 +56,30 @@ export default function BuildMenu({ onClose }: { onClose: () => void }) {
           return (
             <button
               key={def.id}
-              className={`build-item ${active ? 'active' : ''} ${unlocked ? '' : 'locked'}`}
-              disabled={!unlocked}
+              className={`build-item ${active ? 'active' : ''} ${
+                unlocked && !atLimit ? '' : 'locked'
+              }`}
+              disabled={!unlocked || atLimit}
               onClick={() => engine.setTool('build', def.id)}
               title={unlocked ? def.desc : `Unlocks at settlement level ${def.minLevel}`}
             >
               <div className="build-item-head">
                 <span className="build-item-name">{def.label}</span>
                 <span className="build-item-size">
+                  {def.maxCount !== undefined && (
+                    <b className={atLimit ? 'at-limit' : ''}>
+                      {built}/{def.maxCount}{' '}
+                    </b>
+                  )}
                   {def.w}×{def.h}
                 </span>
               </div>
               <p className="build-item-desc">
-                {unlocked ? def.desc : `Requires settlement level ${def.minLevel}`}
+                {!unlocked
+                  ? `Requires settlement level ${def.minLevel}`
+                  : atLimit
+                    ? `The camp already has as many as it needs (${def.maxCount})`
+                    : def.desc}
               </p>
               <div className="build-cost">
                 {(Object.keys(def.cost) as ResourceType[]).map((k) => (
@@ -85,8 +99,9 @@ export default function BuildMenu({ onClose }: { onClose: () => void }) {
       </div>
 
       <p className="build-hint">
-        Click in the world to place. Right click or Escape to stop building. Structures start as
-        blueprints — survivors haul the materials and build them.
+        Pick a structure, then tap the ground to place it. Structures start as blueprints —
+        survivors haul the materials to the site and build them by hand. Use <b>Cancel</b> in the
+        bar below to stop placing.
       </p>
     </div>
   );

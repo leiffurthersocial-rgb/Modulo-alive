@@ -44,6 +44,7 @@ function hash2(x: number, y: number) {
 }
 
 export interface RenderOptions {
+  showSpeech: boolean;
   selectedIds: number[];
   hoverTile: { tx: number; ty: number } | null;
   buildPreview: { defId: string; tx: number; ty: number; valid: boolean; reason: string } | null;
@@ -144,7 +145,7 @@ export class Renderer {
     }
 
     g.save();
-    g.translate(cssW / 2 + cam.shakeX, cssH / 2 + cam.shakeY);
+    g.translate(cam.centerX + cam.shakeX, cam.centerY + cam.shakeY);
     g.scale(cam.zoom, cam.zoom);
     g.translate(-cam.x, -cam.y);
 
@@ -762,7 +763,7 @@ export class Renderer {
       if (s.x < -120 || s.x > cam.viewW + 120 || s.y < -80 || s.y > cam.viewH + 80) continue;
       const selected = opts.selectedIds.includes(c.id);
 
-      if (c.speech && c.speech.until > w.time.t) {
+      if (opts.showSpeech && c.speech && c.speech.until > w.time.t) {
         drawBubble(g, s.x, s.y - 34 * cam.zoom, c.speech.text, c.speech.mood);
       } else if (selected || opts.hoveredCharId === c.id) {
         drawNameTag(g, s.x, s.y - 30 * cam.zoom, c.name);
