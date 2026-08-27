@@ -304,7 +304,7 @@ export function buildRockSprites(variants = 4): NodeSprite[] {
 }
 
 export function buildBushSprites(
-  kind: 'berryBush' | 'herbPatch' | 'reeds' | 'stump' | 'log',
+  kind: 'berryBush' | 'herbPatch' | 'reeds' | 'nettles' | 'stump' | 'log',
   variants = 3
 ): { full: NodeSprite[]; empty: NodeSprite[] } {
   const full: NodeSprite[] = [];
@@ -335,6 +335,18 @@ export function buildBushSprites(
           px(g, x, baseY - hh, 2, hh, state === 'full' ? '#6fae86' : '#4f7a60');
           if (state === 'full') px(g, x - 1, baseY - hh - 2, 4, 2, '#c9dfa0');
         }
+      } else if (kind === 'nettles') {
+        // A low, ragged clump — clearly a thing you harvest, not scenery.
+        for (let i = 0; i < 11; i++) {
+          const x = cx + rng.range(-9, 9);
+          const hh = rng.range(6, 13);
+          px(g, x, baseY - hh, 2, hh, state === 'full' ? '#6f8f47' : '#556b3a');
+          if (state === 'full') {
+            px(g, x - 1, baseY - hh - 2, 4, 2, '#8fb35e');
+            if (rng.chance(0.4)) px(g, x - 2, baseY - hh + 2, 6, 1, '#7ba04f');
+          }
+        }
+        px(g, cx - 9, baseY - 1, 18, 2, 'rgba(0,0,0,0.14)');
       } else if (kind === 'reeds') {
         for (let i = 0; i < 10; i++) {
           const x = cx + rng.range(-8, 8);

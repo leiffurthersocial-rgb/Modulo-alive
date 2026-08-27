@@ -94,7 +94,7 @@ export class Renderer {
     this.treeSprites.pine = buildTreeSprites('pine');
     this.treeSprites.deadTree = buildTreeSprites('deadTree');
     this.rockSprites = buildRockSprites();
-    for (const k of ['berryBush', 'herbPatch', 'reeds', 'stump', 'log'] as const) {
+    for (const k of ['berryBush', 'herbPatch', 'reeds', 'nettles', 'stump', 'log'] as const) {
       this.bushSprites[k] = buildBushSprites(k);
     }
     this.siteIcon = buildSiteIcon();

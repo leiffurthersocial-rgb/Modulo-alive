@@ -138,7 +138,7 @@ export function performWork(
         pickUp(w, c, spec.res, amount, fx);
         // Bark and cordage are only stripped when there is a use for them —
         // otherwise a long clearing job would bury the stores in fiber.
-        if (spec.extra && w.stock[spec.extra.res] < 200 && Math.random() < spec.extra.chance) {
+        if (spec.extra && w.stock[spec.extra.res] < 320 && Math.random() < spec.extra.chance) {
           addResource(w, spec.extra.res, spec.extra.amount);
         }
         n.depleted = true;

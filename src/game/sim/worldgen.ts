@@ -118,7 +118,7 @@ export function createWorld(seed = Math.floor(Math.random() * 0xffffffff)): Worl
   w.stock.rawFood = 18;
   w.stock.rawMeat = 8;
   w.stock.cookedMeat = 14;
-  w.stock.fiber = 16;
+  w.stock.fiber = 40;
   w.stock.water = 20;
   w.stock.herbs = 4;
   w.stock.medicine = 3;
@@ -234,6 +234,8 @@ function scatterVegetation(w: World, rng: RNG) {
         addNode(w, 'berryBush', tx, ty, rng);
       } else if (rng.chance(0.006)) {
         addNode(w, 'herbPatch', tx, ty, rng);
+      } else if (rng.chance(0.014)) {
+        addNode(w, 'nettles', tx, ty, rng);
       } else if (rng.chance(0.008)) {
         addNode(w, 'rock', tx, ty, rng);
       } else if (rng.chance(0.006 * rampe)) {
@@ -246,13 +248,14 @@ function scatterVegetation(w: World, rng: RNG) {
   // forest generated. Existing trees give way so these read as small glades.
   seedNearCamp(w, rng, 'berryBush', 14, 6, 18);
   seedNearCamp(w, rng, 'herbPatch', 5, 7, 18);
+  seedNearCamp(w, rng, 'nettles', 12, 5, 16);
   seedNearCamp(w, rng, 'rock', 12, 6, 20);
 }
 
 function seedNearCamp(
   w: World,
   rng: RNG,
-  kind: 'berryBush' | 'herbPatch' | 'rock',
+  kind: 'berryBush' | 'herbPatch' | 'nettles' | 'rock',
   count: number,
   rMin: number,
   rMax: number

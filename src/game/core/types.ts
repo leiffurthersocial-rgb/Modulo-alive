@@ -97,6 +97,7 @@ export type NodeKind =
   | 'berryBush'
   | 'herbPatch'
   | 'reeds'
+  | 'nettles'
   | 'stump'
   | 'log';
 

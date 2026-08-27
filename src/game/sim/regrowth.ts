@@ -67,6 +67,14 @@ const RULES: GrowthRule[] = [
     attempts: 5,
   },
   {
+    kind: 'nettles',
+    target: 150,
+    terrain: [Terrain.Grass, Terrain.DarkGrass, Terrain.Dirt],
+    minCampDistance: 6,
+    clusters: true,
+    attempts: 8,
+  },
+  {
     kind: 'reeds',
     target: 90,
     terrain: [Terrain.Sand, Terrain.Grass],
@@ -179,7 +187,13 @@ export function wildernessCensus(w: World) {
     if (n.depleted) continue;
     if (n.kind === 'tree' || n.kind === 'pine' || n.kind === 'deadTree') trees++;
     else if (n.kind === 'rock') rocks++;
-    else if (n.kind === 'berryBush' || n.kind === 'herbPatch' || n.kind === 'reeds') forage++;
+    else if (
+      n.kind === 'berryBush' ||
+      n.kind === 'herbPatch' ||
+      n.kind === 'reeds' ||
+      n.kind === 'nettles'
+    )
+      forage++;
   }
   return { trees, rocks, forage, animals: w.animals.filter((a) => a.state !== 'dead').length };
 }

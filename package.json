@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "simtest": "tsx scripts/simtest.ts",
     "mortality": "tsx scripts/mortality.ts",
-    "regrowth": "tsx scripts/growthtest.ts"
+    "regrowth": "tsx scripts/growthtest.ts",
+    "fiber": "tsx scripts/fibertest.ts"
   },
   "dependencies": {
     "next": "^15.5.24",

@@ -58,9 +58,9 @@ export const CROPS: CropDef[] = [
   {
     id: 'flax',
     label: 'Flax',
-    growHours: 26,
+    growHours: 22,
     yieldRes: 'fiber',
-    yieldAmount: 12,
+    yieldAmount: 18,
     seedCost: 1,
     seedReturn: 0.6,
     colorYoung: '#8fae7a',

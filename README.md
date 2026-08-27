@@ -102,6 +102,7 @@ npm run simtest        # asserts the full loop: movement, work, food, building,
                        # farming, exploration, injury, permadeath, save/load
 npm run mortality      # collapsing vs dying: the balance of permadeath
 npm run regrowth       # the land refilling after a settlement strips it
+npm run fiber          # fiber stays gettable — it gates beds and bandages
 npm run simtest:idle    # 12 days with zero player input — the baseline difficulty
 ```
 

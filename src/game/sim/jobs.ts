@@ -70,6 +70,18 @@ export const JOB_LABEL: Record<JobType, string> = {
 
 const MAX_JOBS = 90;
 
+/**
+ * How much of a material the settlement keeps back from optional crafting.
+ * Fiber in particular goes into beds and bandages, and running out of it is
+ * far worse than going without a hat.
+ */
+const RESERVE: Partial<Record<ResourceType, number>> = {
+  fiber: 45,
+  herbs: 6,
+  wood: 25,
+  stone: 15,
+};
+
 export function createJob(
   w: World,
   type: JobType,
@@ -421,9 +433,13 @@ export function generateJobs(w: World, autoGather = true) {
           ? (w.gear[r.gear] ?? 0) + countEquipped(w, r.gear)
           : w.stock[Object.keys(r.output)[0] as ResourceType];
         if (have >= r.autoCap) continue;
+        // Keep a working reserve: comforts like hats and vests must not eat
+        // the fiber the camp needs for beds and bandages.
         let ok = true;
         for (const k of Object.keys(r.input) as ResourceType[]) {
-          if (w.stock[k] < (r.input[k] ?? 0) * 2) ok = false;
+          const cost = r.input[k] ?? 0;
+          const reserve = RESERVE[k] ?? 0;
+          if (w.stock[k] < cost * 2 || w.stock[k] < cost + reserve) ok = false;
         }
         if (!ok) continue;
         if (index.has('craft', bench.id, recipeIndex(r.id))) continue;
@@ -497,12 +513,24 @@ export function generateJobs(w: World, autoGather = true) {
       if (!autoNodeJob(w, index, 'forage', (n) => n.kind === 'berryBush', foragePriority)) break;
     }
   }
+  // Fiber goes into beds, bandages, hats and vests. Like food, gathering it is
+  // never blocked by a full store — the camp always needs some on hand.
+  if (w.stock.fiber < 110) {
+    const short = w.stock.fiber < 45;
+    const target = short ? 3 : 2;
+    let guard = 0;
+    while (forageCount(w, 'nettles') + forageCount(w, 'reeds') < target && guard++ < 6) {
+      if (
+        !autoNodeJob(w, index, 'forage', (n) => n.kind === 'nettles', short ? 74 : 38) &&
+        !autoNodeJob(w, index, 'forage', (n) => n.kind === 'reeds', short ? 72 : 36)
+      )
+        break;
+    }
+  }
+
   if (capFree > 45) {
     if (w.stock.herbs < 12 && forageCount(w, 'herbPatch') < 2) {
       autoNodeJob(w, index, 'forage', (n) => n.kind === 'herbPatch', 26);
-    }
-    if (w.stock.fiber < 30 && forageCount(w, 'reeds') < 2) {
-      autoNodeJob(w, index, 'forage', (n) => n.kind === 'reeds', 24);
     }
     if (autoGather && w.stock.wood < 45 && jobCount(w, 'chop') < 2 && food > pop * 5) {
       autoNodeJob(
