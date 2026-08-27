@@ -20,14 +20,28 @@ import {
   buildRockSprites,
   buildSiteIcon,
   buildTerrainAtlas,
+  buildScatterAtlas,
   buildTreeSprites,
   makeCanvas,
+  SCATTER_VARIANTS,
   type NodeSprite,
   TERRAIN_VARIANTS,
 } from './sprites';
 import { SITE_PROFILES } from '../sim/exploration';
 
 const CHUNK = 8; // tiles per cached chunk
+
+function isGrass(w: World, tx: number, ty: number) {
+  const t = w.terrain[idx(w, tx, ty)];
+  return t === Terrain.Grass || t === Terrain.DarkGrass;
+}
+
+/** Cheap stable hash so ground detail never shifts between frames. */
+function hash2(x: number, y: number) {
+  let h = (x * 374761393 + y * 668265263) | 0;
+  h = (h ^ (h >> 13)) * 1274126177;
+  return (h ^ (h >> 16)) >>> 0;
+}
 
 export interface RenderOptions {
   selectedIds: number[];
@@ -42,6 +56,7 @@ export class Renderer {
   private canvas: HTMLCanvasElement;
   private g: CanvasRenderingContext2D;
   private terrainAtlas!: HTMLCanvasElement;
+  private scatterAtlas!: HTMLCanvasElement;
   private treeSprites: Record<string, NodeSprite[]> = {};
   private rockSprites: NodeSprite[] = [];
   private bushSprites: Record<string, { full: NodeSprite[]; empty: NodeSprite[] }> = {};
@@ -63,6 +78,7 @@ export class Renderer {
 
   private buildAssets() {
     this.terrainAtlas = buildTerrainAtlas();
+    this.scatterAtlas = buildScatterAtlas();
     this.treeSprites.tree = buildTreeSprites('tree');
     this.treeSprites.pine = buildTreeSprites('pine');
     this.treeSprites.deadTree = buildTreeSprites('deadTree');
@@ -169,18 +185,79 @@ export class Renderer {
         );
       }
     }
-    // Soften water edges so the stream reads as a stream.
+    // Blend hard terrain seams and scatter ground detail. Both are baked into
+    // the cached chunk, so they cost nothing per frame.
     for (let ty = 0; ty < CHUNK; ty++) {
       for (let tx = 0; tx < CHUNK; tx++) {
         const wx = cx * CHUNK + tx;
         const wy = cy * CHUNK + ty;
         if (wx >= w.width || wy >= w.height) continue;
-        if (w.terrain[idx(w, wx, wy)] !== Terrain.Water) continue;
-        const left = wx > 0 && w.terrain[idx(w, wx - 1, wy)] !== Terrain.Water;
-        const right = wx < w.width - 1 && w.terrain[idx(w, wx + 1, wy)] !== Terrain.Water;
-        g.fillStyle = 'rgba(140,200,220,0.25)';
-        if (left) g.fillRect(tx * TILE, ty * TILE, 2, TILE);
-        if (right) g.fillRect(tx * TILE + TILE - 2, ty * TILE, 2, TILE);
+        const here = w.terrain[idx(w, wx, wy)];
+        const dx = tx * TILE;
+        const dy = ty * TILE;
+
+        if (here === Terrain.Water) {
+          const left = wx > 0 && w.terrain[idx(w, wx - 1, wy)] !== Terrain.Water;
+          const right = wx < w.width - 1 && w.terrain[idx(w, wx + 1, wy)] !== Terrain.Water;
+          g.fillStyle = 'rgba(140,200,220,0.25)';
+          if (left) g.fillRect(dx, dy, 2, TILE);
+          if (right) g.fillRect(dx + TILE - 2, dy, 2, TILE);
+          continue;
+        }
+
+        // Grass creeps over the edge of cleared ground in ragged tufts, so the
+        // camp is not a hard-edged brown polygon stamped on a green field.
+        if (here === Terrain.Dirt || here === Terrain.Path || here === Terrain.Soil) {
+          const up = wy > 0 && isGrass(w, wx, wy - 1);
+          const down = wy < w.height - 1 && isGrass(w, wx, wy + 1);
+          const left = wx > 0 && isGrass(w, wx - 1, wy);
+          const right = wx < w.width - 1 && isGrass(w, wx + 1, wy);
+          if (up || down || left || right) {
+            const seed = hash2(wx * 3 + 11, wy * 7 + 5);
+            const fringe = (
+              ex: number,
+              ey: number,
+              horizontal: boolean,
+              inward: number
+            ) => {
+              for (let i = 0; i < 6; i++) {
+                const t = ((seed >> (i * 3)) % 7) + 1; // 1..7 px of overhang
+                const off = i * 4;
+                g.fillStyle = i % 2 === 0 ? '#4e8a45' : '#437a3c';
+                if (horizontal) {
+                  const h2 = t;
+                  g.fillRect(ex + off, inward > 0 ? ey : ey - h2, 4, h2);
+                } else {
+                  const w2 = t;
+                  g.fillRect(inward > 0 ? ex : ex - w2, ey + off, w2, 4);
+                }
+              }
+            };
+            if (up) fringe(dx, dy, true, 1);
+            if (down) fringe(dx, dy + TILE, true, -1);
+            if (left) fringe(dx, dy, false, 1);
+            if (right) fringe(dx + TILE, dy, false, -1);
+          }
+        }
+
+        // Deterministic scatter: same tile always gets the same detail.
+        const h = hash2(wx, wy);
+        const chance = here === Terrain.Grass || here === Terrain.DarkGrass ? 0.42 : 0.3;
+        if ((h % 1000) / 1000 < chance) {
+          const row = here === Terrain.Grass || here === Terrain.DarkGrass ? 0 : 1;
+          const variant = (h >> 10) % SCATTER_VARIANTS;
+          g.drawImage(
+            this.scatterAtlas,
+            variant * TILE,
+            row * TILE,
+            TILE,
+            TILE,
+            dx,
+            dy,
+            TILE,
+            TILE
+          );
+        }
       }
     }
     this.chunks.set(key, c);
@@ -701,7 +778,6 @@ const CARRY_COLORS: Record<string, string> = {
   herbs: '#83b57a',
   seeds: '#d6c98a',
   tools: '#b9b9c2',
-  hide: '#8d6a4b',
 };
 
 const MOOD_COLORS: Record<string, string> = {

@@ -61,6 +61,74 @@ const TERRAIN_PALETTE: Record<number, [string, string, string]> = {
   [Terrain.Floor]: ['#8a6f4c', '#977c58', '#7a6141'],
 };
 
+/**
+ * Small deterministic ground details — pebbles, tufts, twigs — keyed off the
+ * tile coordinate so they stay put between frames and across saves.
+ */
+export const SCATTER_VARIANTS = 6;
+
+export function buildScatterAtlas(): HTMLCanvasElement {
+  const c = makeCanvas(TILE * SCATTER_VARIANTS, TILE * 2);
+  const g = ctx2d(c);
+  const rng = new RNG(778899);
+
+  // Row 0: things that sit on grass.
+  for (let v = 0; v < SCATTER_VARIANTS; v++) {
+    const ox = v * TILE;
+    if (v < 3) {
+      for (let i = 0; i < 4 + v; i++) {
+        const x = ox + rng.int(3, TILE - 4);
+        const y = rng.int(4, TILE - 4);
+        const h = rng.int(3, 6);
+        px(g, x, y - h, 1, h, '#5f9a4f');
+        px(g, x + 1, y - h + 1, 1, h - 1, '#4a7d3f');
+      }
+    } else if (v === 3) {
+      for (let i = 0; i < 3; i++) {
+        px(g, ox + rng.int(4, TILE - 6), rng.int(6, TILE - 6), 2, 2, '#7d7d86');
+      }
+    } else if (v === 4) {
+      const x = ox + rng.int(5, TILE - 9);
+      const y = rng.int(8, TILE - 6);
+      px(g, x, y, 6, 1, '#5c4530');
+      px(g, x + 4, y - 2, 3, 1, '#5c4530');
+    } else {
+      for (let i = 0; i < 5; i++) {
+        px(g, ox + rng.int(3, TILE - 4), rng.int(3, TILE - 4), 1, 1, '#d8d05c');
+      }
+      px(g, ox + rng.int(6, TILE - 8), rng.int(6, TILE - 8), 2, 2, '#e8e0a0');
+    }
+  }
+
+  // Row 1: things that sit on bare dirt and paths.
+  for (let v = 0; v < SCATTER_VARIANTS; v++) {
+    const ox = v * TILE;
+    const oy = TILE;
+    if (v < 2) {
+      for (let i = 0; i < 5; i++) {
+        px(g, ox + rng.int(2, TILE - 4), oy + rng.int(2, TILE - 4), 2, 1, '#6d573c');
+      }
+    } else if (v < 4) {
+      for (let i = 0; i < 3; i++) {
+        const x = ox + rng.int(4, TILE - 7);
+        const y = oy + rng.int(4, TILE - 7);
+        px(g, x, y, 3, 2, '#8a8a93');
+        px(g, x, y, 3, 1, '#9d9da6');
+      }
+    } else if (v === 4) {
+      const x = ox + rng.int(5, TILE - 10);
+      const y = oy + rng.int(8, TILE - 6);
+      px(g, x, y, 7, 2, '#5c4530');
+      px(g, x, y, 7, 1, '#6d5236');
+    } else {
+      for (let i = 0; i < 3; i++) {
+        px(g, ox + rng.int(4, TILE - 5), oy + rng.int(4, TILE - 6), 1, 3, '#7d8a52');
+      }
+    }
+  }
+  return c;
+}
+
 export function buildTerrainAtlas(): HTMLCanvasElement {
   const kinds = Object.keys(TERRAIN_PALETTE).length;
   const c = makeCanvas(TILE * TERRAIN_VARIANTS, TILE * kinds);
@@ -447,16 +515,42 @@ function drawCharFrame(
 export function buildCharacterSheet(a: Appearance): HTMLCanvasElement {
   const c = makeCanvas(CHAR_W * CHAR_FRAMES, CHAR_H * CHAR_DIRS);
   const g = ctx2d(c);
+  // Frames are drawn once into a scratch cell so a dark outline can be
+  // stamped underneath — silhouettes are what make characters readable at
+  // low zoom against a busy forest.
+  const cell = makeCanvas(CHAR_W, CHAR_H);
+  const cg = ctx2d(cell);
+  const outline = makeCanvas(CHAR_W, CHAR_H);
+  const og = ctx2d(outline);
+
   for (let dir = 0; dir < CHAR_DIRS; dir++) {
     for (let f = 0; f < CHAR_FRAMES; f++) {
-      g.save();
-      g.translate(f * CHAR_W, dir * CHAR_H);
-      drawCharFrame(g, a, dir, f);
-      g.restore();
+      cg.clearRect(0, 0, CHAR_W, CHAR_H);
+      drawCharFrame(cg, a, dir, f);
+
+      og.clearRect(0, 0, CHAR_W, CHAR_H);
+      og.globalCompositeOperation = 'source-over';
+      og.drawImage(cell, 0, 0);
+      og.globalCompositeOperation = 'source-in';
+      og.fillStyle = 'rgba(14, 18, 12, 0.9)';
+      og.fillRect(0, 0, CHAR_W, CHAR_H);
+      og.globalCompositeOperation = 'source-over';
+
+      const ox = f * CHAR_W;
+      const oy = dir * CHAR_H;
+      for (const [dx, dy] of OUTLINE_OFFSETS) g.drawImage(outline, ox + dx, oy + dy);
+      g.drawImage(cell, ox, oy);
     }
   }
   return c;
 }
+
+const OUTLINE_OFFSETS: [number, number][] = [
+  [-1, 0],
+  [1, 0],
+  [0, -1],
+  [0, 1],
+];
 
 /* ------------------------------------------------------------------ */
 /* Small icons used by the world layer                                 */

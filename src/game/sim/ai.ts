@@ -15,7 +15,6 @@ import {
   buildingCenterX,
   buildingCenterY,
   findBuildings,
-  lightAt,
   log,
   nearestBuilding,
   roll,
@@ -161,6 +160,12 @@ function think(w: World, c: Character, ctx: Ctx) {
       c.workT = 0;
       c.activity = 'work';
       c.path = [];
+      // Pick up a tool set from the stores if there is one spare; it makes
+      // every kind of work meaningfully faster.
+      if (!c.equipment.tool && w.stock.tools >= 1) {
+        takeResource(w, 'tools', 1);
+        c.equipment.tool = 'tools';
+      }
       return;
     }
   }

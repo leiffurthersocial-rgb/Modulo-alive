@@ -30,10 +30,23 @@ const ICONS: Record<string, string> = {
   water: '💧',
   seeds: '🌱',
   tools: '🔨',
-  hide: '🦌',
 };
 
-export default function TopBar({ onMenu }: { onMenu: () => void }) {
+export default function TopBar({
+  onMenu,
+  compact,
+  rosterOpen,
+  logOpen,
+  onToggleRoster,
+  onToggleLog,
+}: {
+  onMenu: () => void;
+  compact: boolean;
+  rosterOpen: boolean;
+  logOpen: boolean;
+  onToggleRoster: () => void;
+  onToggleLog: () => void;
+}) {
   const engine = useEngine();
   const w = engine.world;
   const clock = worldClock(w);
@@ -48,8 +61,22 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
   return (
     <div className="topbar">
       <div className="topbar-left">
-        <button className="btn btn-icon" onClick={onMenu} title="Menu (Esc)">
+        <button className="btn btn-icon" onClick={onMenu} title="Menu">
           ☰
+        </button>
+        <button
+          className={`btn btn-icon panel-toggle ${rosterOpen ? 'on' : ''}`}
+          onClick={onToggleRoster}
+          title="Show or hide the survivor roster"
+        >
+          👥
+        </button>
+        <button
+          className={`btn btn-icon panel-toggle ${logOpen ? 'on' : ''}`}
+          onClick={onToggleLog}
+          title="Show or hide the chronicle and map"
+        >
+          📜
         </button>
         <div className="clock">
           <div className="clock-day">Day {clock.day}</div>
@@ -83,16 +110,18 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
       </div>
 
       <div className="topbar-right">
-        <div className="pop" title="Living survivors">
-          👥 {pop}
-        </div>
+        {!compact && (
+          <div className="pop" title="Living survivors">
+            👥 {pop}
+          </div>
+        )}
         <div className="speeds">
           {engine.speeds.map((s) => (
             <button
               key={s}
               className={`btn speed ${engine.speed === s ? 'active' : ''}`}
               onClick={() => engine.setSpeed(s)}
-              title={s === 0 ? 'Pause (Space)' : `${s}x speed`}
+              title={s === 0 ? 'Pause' : `${s}x speed`}
             >
               {s === 0 ? '❚❚' : `${s}×`}
             </button>

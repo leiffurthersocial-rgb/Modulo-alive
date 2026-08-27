@@ -7,7 +7,14 @@ let engine: GameEngine | null = null;
 
 /** The engine is a browser-only singleton; it is never created during SSR. */
 export function getEngine(): GameEngine {
-  if (!engine) engine = new GameEngine();
+  if (!engine) {
+    engine = new GameEngine();
+    // A debug handle on the running game. Handy from the browser console, and
+    // it is what the end-to-end tests drive the game through.
+    if (typeof window !== 'undefined') {
+      (window as unknown as { moduloAlive: GameEngine }).moduloAlive = engine;
+    }
+  }
   return engine;
 }
 

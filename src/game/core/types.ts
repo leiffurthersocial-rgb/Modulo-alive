@@ -22,7 +22,6 @@ export const RESOURCE_TYPES = [
   'herbs',
   'seeds',
   'tools',
-  'hide',
 ] as const;
 
 export type ResourceType = (typeof RESOURCE_TYPES)[number];
@@ -40,7 +39,6 @@ export const RESOURCE_LABEL: Record<ResourceType, string> = {
   herbs: 'Herbs',
   seeds: 'Seeds',
   tools: 'Tools',
-  hide: 'Hide',
 };
 
 /** Resources that occupy storage capacity. */
@@ -55,7 +53,6 @@ export const STORED_RESOURCES: ResourceType[] = [
   'herbs',
   'seeds',
   'tools',
-  'hide',
 ];
 
 export function emptyStockpile(): Stockpile {
@@ -217,8 +214,7 @@ export type SkillId =
   | 'scavenging'
   | 'exploration'
   | 'combat'
-  | 'repair'
-  | 'research';
+  | 'repair';
 
 export const SKILL_IDS: SkillId[] = [
   'woodcutting',
@@ -231,7 +227,6 @@ export const SKILL_IDS: SkillId[] = [
   'exploration',
   'combat',
   'repair',
-  'research',
 ];
 
 export const SKILL_LABEL: Record<SkillId, string> = {
@@ -245,7 +240,6 @@ export const SKILL_LABEL: Record<SkillId, string> = {
   exploration: 'Exploration',
   combat: 'Combat',
   repair: 'Repair',
-  research: 'Research',
 };
 
 export interface Skill {
@@ -416,7 +410,8 @@ export interface Character {
   order: PlayerOrder | null;
 
   carrying: { res: ResourceType; amount: number } | null;
-  equipment: { tool: string | null };
+  /** Equipped tool set, or null. Tools are taken from the stores when working. */
+  equipment: { tool: 'tools' | null };
 
   relationships: Record<number, number>;
   priorities: Record<WorkType, number>;
@@ -436,7 +431,6 @@ export interface Character {
   workT: number;
   /** Cosmetic bob used by the renderer. */
   bob: number;
-  thought: string;
 }
 
 export type SpeechMood = 'neutral' | 'happy' | 'sad' | 'alarm';
@@ -461,7 +455,6 @@ export type JobType =
   | 'gatherWater'
   | 'haulToSite'
   | 'build'
-  | 'deconstruct'
   | 'till'
   | 'plant'
   | 'tend'
@@ -596,8 +589,6 @@ export interface Weather {
 
 export interface Progression {
   level: number;
-  unlocked: string[];
-  objectivesDone: string[];
   wallsUnlocked: boolean;
 }
 

@@ -48,6 +48,17 @@ export class Camera {
     this.clampToWorld();
   }
 
+  /** Pinch zoom: scale by `factor` while keeping the given screen point fixed. */
+  applyZoom(screenX: number, screenY: number, factor: number) {
+    const before = this.screenToWorld(screenX, screenY);
+    this.targetZoom = clamp(this.targetZoom * factor, this.minZoom, this.maxZoom);
+    this.zoom = this.targetZoom;
+    const after = this.screenToWorld(screenX, screenY);
+    this.x += before.x - after.x;
+    this.y += before.y - after.y;
+    this.clampToWorld();
+  }
+
   update(dt: number, shake: number) {
     if (shake > 0) {
       this.shakeX = (Math.random() - 0.5) * shake * 10;

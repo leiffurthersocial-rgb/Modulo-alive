@@ -14,7 +14,6 @@ import Minimap from './Minimap';
 import Notices from './Notices';
 import MainMenu from './MainMenu';
 import { useEngine } from '@/store/engineStore';
-import { listSaves } from '@/game/sim/save';
 
 export default function GameShell() {
   const engine = useEngine();
@@ -22,28 +21,44 @@ export default function GameShell() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [buildOpen, setBuildOpen] = useState(false);
   const [rightTab, setRightTab] = useState<'log' | 'goals'>('log');
-  const [hasSaves, setHasSaves] = useState(false);
+  const [compact, setCompact] = useState(false);
+  const [rosterOpen, setRosterOpen] = useState(true);
+  const [logOpen, setLogOpen] = useState(true);
 
+  // Small screens (iPad portrait, phones) get the side panels as overlays that
+  // are off by default, so the world keeps most of the glass.
   useEffect(() => {
-    setHasSaves(listSaves().length > 0);
+    const apply = () => {
+      const narrow = window.innerWidth < 1080;
+      setCompact(narrow);
+      setRosterOpen(!narrow);
+      setLogOpen(!narrow);
+    };
+    apply();
+    window.addEventListener('resize', apply);
+    window.addEventListener('orientationchange', apply);
+    return () => {
+      window.removeEventListener('resize', apply);
+      window.removeEventListener('orientationchange', apply);
+    };
   }, []);
 
-  // Escape opens the menu when no tool is active.
+  // Keyboard shortcuts are a convenience, never the only way to do anything.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && started) {
-        if (engine.tool !== 'select') return;
-        if (buildOpen) {
+      if (!started) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+      if (e.key === 'Escape') {
+        const wasBuild = engine.tool === 'build';
+        const idle = engine.escape();
+        if (wasBuild || buildOpen) {
           setBuildOpen(false);
           return;
         }
-        setMenuOpen((m) => !m);
+        if (idle) setMenuOpen((m) => !m);
       }
-      if (e.key.toLowerCase() === 'b' && started) {
-        const t = e.target as HTMLElement | null;
-        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
-        setBuildOpen((b) => !b);
-      }
+      if (e.key.toLowerCase() === 'b') setBuildOpen((b) => !b);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -62,64 +77,92 @@ export default function GameShell() {
   }, [menuOpen, started, engine]);
 
   useEffect(() => {
-    if (buildOpen && engine.tool !== 'build') return;
     if (!buildOpen && engine.tool === 'build') engine.setTool('select');
   }, [buildOpen, engine]);
 
   const w = engine.world;
   const selectedChar =
     engine.selected.length > 0
-      ? w.characters.find((c) => c.id === engine.selected[engine.selected.length - 1]) ?? null
+      ? (w.characters.find((c) => c.id === engine.selected[engine.selected.length - 1]) ?? null)
       : null;
   const selectedBuilding =
-    engine.selectedBuildingId >= 0 ? w.buildings.get(engine.selectedBuildingId) ?? null : null;
+    engine.selectedBuildingId >= 0 ? (w.buildings.get(engine.selectedBuildingId) ?? null) : null;
+
+  const toolActive = engine.tool !== 'select';
+  const toolText =
+    engine.tool === 'build' && engine.buildDefId
+      ? 'Tap the ground to place the structure'
+      : engine.tool === 'mark'
+        ? 'Drag across trees and rocks to mark them for clearing'
+        : engine.tool === 'unmark'
+          ? 'Drag across marked resources to unmark them'
+          : engine.tool === 'demolish'
+            ? 'Tap a building to take it down'
+            : '';
 
   return (
-    <div className="game-root">
+    <div className={`game-root ${compact ? 'compact' : ''} ${engine.touch ? 'touch' : ''}`}>
       <div className="viewport">
         <GameCanvas />
         <Notices />
-        {engine.tool !== 'select' && (
+        {started && (toolActive || engine.orderMode) && (
           <div className="tool-banner">
-            {engine.tool === 'build' && engine.buildDefId
-              ? 'Placing structure — right click or Escape to stop'
-              : engine.tool === 'mark'
-                ? 'Drag over trees and rocks to mark them for clearing'
-                : engine.tool === 'unmark'
-                  ? 'Drag over marked resources to unmark them'
-                  : 'Click a building to dismantle it'}
+            <span>
+              {toolActive
+                ? toolText
+                : 'Order mode — tap the world to command the selected survivors'}
+            </span>
+            <button
+              className="btn btn-cancel"
+              onClick={() => {
+                engine.setOrderMode(false);
+                engine.setTool('select');
+                setBuildOpen(false);
+              }}
+            >
+              Cancel
+            </button>
           </div>
         )}
       </div>
 
       {started && (
         <>
-          <TopBar onMenu={() => setMenuOpen(true)} />
+          <TopBar
+            onMenu={() => setMenuOpen(true)}
+            compact={compact}
+            rosterOpen={rosterOpen}
+            logOpen={logOpen}
+            onToggleRoster={() => setRosterOpen((v) => !v)}
+            onToggleLog={() => setLogOpen((v) => !v)}
+          />
 
-          <aside className="left-rail">
-            <CharacterList />
-          </aside>
+          {rosterOpen && (
+            <aside className="left-rail">
+              <CharacterList />
+            </aside>
+          )}
 
-          <aside className="right-rail">
-            <div className="rail-tabs">
-              <button
-                className={`tab ${rightTab === 'log' ? 'active' : ''}`}
-                onClick={() => setRightTab('log')}
-              >
-                Chronicle
-              </button>
-              <button
-                className={`tab ${rightTab === 'goals' ? 'active' : ''}`}
-                onClick={() => setRightTab('goals')}
-              >
-                Settlement
-              </button>
-            </div>
-            <div className="rail-body">
-              {rightTab === 'log' ? <EventLog /> : <Objectives />}
-            </div>
-            <Minimap />
-          </aside>
+          {logOpen && (
+            <aside className="right-rail">
+              <div className="rail-tabs">
+                <button
+                  className={`tab ${rightTab === 'log' ? 'active' : ''}`}
+                  onClick={() => setRightTab('log')}
+                >
+                  Chronicle
+                </button>
+                <button
+                  className={`tab ${rightTab === 'goals' ? 'active' : ''}`}
+                  onClick={() => setRightTab('goals')}
+                >
+                  Settlement
+                </button>
+              </div>
+              <div className="rail-body">{rightTab === 'log' ? <EventLog /> : <Objectives />}</div>
+              <Minimap />
+            </aside>
+          )}
 
           <div className="bottom-dock">
             <Toolbar buildOpen={buildOpen} onToggleBuild={() => setBuildOpen((b) => !b)} />
@@ -136,14 +179,24 @@ export default function GameShell() {
             </div>
           )}
 
-          {selectedChar && (
+          {(selectedChar || selectedBuilding) && (
             <div className="inspector">
-              <CharacterPanel character={selectedChar} />
-            </div>
-          )}
-          {!selectedChar && selectedBuilding && (
-            <div className="inspector">
-              <BuildingPanel building={selectedBuilding} />
+              <button
+                className="btn btn-icon inspector-close"
+                onClick={() => {
+                  engine.selected = [];
+                  engine.selectedBuildingId = -1;
+                  engine.emit();
+                }}
+                title="Close"
+              >
+                ✕
+              </button>
+              {selectedChar ? (
+                <CharacterPanel character={selectedChar} />
+              ) : (
+                selectedBuilding && <BuildingPanel building={selectedBuilding} />
+              )}
             </div>
           )}
         </>

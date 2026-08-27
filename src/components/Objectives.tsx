@@ -36,6 +36,10 @@ export default function Objectives() {
       )}
       <div className="obj-stats">
         <div>
+          <span>Days survived</span>
+          <span>{w.stats.daysSurvived}</span>
+        </div>
+        <div>
           <span>Trees felled</span>
           <span>{w.stats.treesFelled}</span>
         </div>

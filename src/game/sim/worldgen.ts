@@ -72,7 +72,7 @@ export function createWorld(seed = Math.floor(Math.random() * 0xffffffff)): Worl
     log: [],
     time: { t: 0, minutes: 7 * 60 },
     weather: { kind: 'clear', t: 600, intensity: 0 },
-    progression: { level: 1, unlocked: [], objectivesDone: [], wallsUnlocked: false },
+    progression: { level: 1, wallsUnlocked: false },
     campCenter: { tx: Math.floor(width / 2), ty: Math.floor(height / 2) },
     nextNodeId: 1,
     nextBuildingId: 1,
@@ -203,8 +203,8 @@ function scatterVegetation(w: World, rng: RNG) {
       // Density ramps up away from the camp, modulated by noise so the forest
       // has thickets and small natural clearings.
       const density = fbm(noise, tx * 0.055, ty * 0.055, 4);
-      const rampe = clamp((dCamp - 7.5) / 12, 0, 1);
-      const treeChance = (0.05 + density * 0.52) * rampe;
+      const rampe = clamp((dCamp - 7.5) / 8, 0, 1);
+      const treeChance = (0.07 + density * 0.66) * rampe;
 
       if (t === Terrain.Stone) {
         if (rng.chance(0.16)) addNode(w, 'rock', tx, ty, rng);
@@ -233,7 +233,7 @@ function scatterVegetation(w: World, rng: RNG) {
   // forest generated. Existing trees give way so these read as small glades.
   seedNearCamp(w, rng, 'berryBush', 14, 6, 18);
   seedNearCamp(w, rng, 'herbPatch', 5, 7, 18);
-  seedNearCamp(w, rng, 'rock', 7, 6, 16);
+  seedNearCamp(w, rng, 'rock', 12, 6, 20);
 }
 
 function seedNearCamp(

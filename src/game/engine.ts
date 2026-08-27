@@ -60,6 +60,10 @@ export class GameEngine {
 
   selected: number[] = [];
   selectedBuildingId = -1;
+  /** True once the player has used a touch screen; the UI adapts to it. */
+  touch = false;
+  /** On touch, taps give orders instead of selecting while this is on. */
+  orderMode = false;
   hoveredCharId = -1;
   hoverTile: { tx: number; ty: number } | null = null;
   tool: Tool = 'select';
@@ -78,6 +82,11 @@ export class GameEngine {
   private dragStart: { x: number; y: number; wx: number; wy: number } | null = null;
   private dragging: 'none' | 'pan' | 'select' | 'mark' = 'none';
   private dragCurrent: { x: number; y: number; wx: number; wy: number } | null = null;
+  /** Live touch points, keyed by pointerId, for pinch-zoom and two-finger pan. */
+  private pointers = new Map<number, { x: number; y: number }>();
+  private pinch: { dist: number; midX: number; midY: number } | null = null;
+  private longPress: ReturnType<typeof setTimeout> | null = null;
+  private suppressTap = false;
   private nextNoticeId = 1;
   private rng = new RNG(12345);
 
@@ -322,7 +331,33 @@ export class GameEngine {
   setTool(t: Tool, defId?: string) {
     this.tool = t;
     this.buildDefId = t === 'build' ? (defId ?? this.buildDefId) : null;
+    if (t !== 'select') this.orderMode = false;
     this.emit();
+  }
+
+  setOrderMode(on: boolean) {
+    this.orderMode = on;
+    if (on) this.setTool('select');
+    this.emit();
+  }
+
+  /**
+   * Escape is a single back-step, not two: it cancels the active tool, then
+   * clears the selection, and only then asks the shell to open the menu.
+   * @returns true when nothing was left to cancel.
+   */
+  escape(): boolean {
+    if (this.tool !== 'select') {
+      this.setTool('select');
+      return false;
+    }
+    if (this.selected.length || this.selectedBuildingId >= 0) {
+      this.selected = [];
+      this.selectedBuildingId = -1;
+      this.emit();
+      return false;
+    }
+    return true;
   }
 
   keyDown(e: KeyboardEvent) {
@@ -331,12 +366,6 @@ export class GameEngine {
     if (k === ' ') {
       e.preventDefault();
       this.togglePause();
-    } else if (k === 'escape') {
-      if (this.tool !== 'select') this.setTool('select');
-      else {
-        this.selected = [];
-        this.emit();
-      }
     } else if (k === '1') this.setSpeed(0);
     else if (k === '2') this.setSpeed(1);
     else if (k === '3') this.setSpeed(2);
@@ -375,9 +404,26 @@ export class GameEngine {
   pointerDown(e: PointerEvent, rect: DOMRect) {
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
+    const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
+    if (isTouch && !this.touch) {
+      this.touch = true;
+      this.emit();
+    }
+
+    this.pointers.set(e.pointerId, { x: sx, y: sy });
+    if (this.pointers.size === 2) {
+      this.beginPinch();
+      this.cancelLongPress();
+      this.dragging = 'none';
+      this.dragStart = null;
+      return;
+    }
+    if (this.pointers.size > 2) return;
+
     const wp = this.cam.screenToWorld(sx, sy);
     this.dragStart = { x: sx, y: sy, wx: wp.x, wy: wp.y };
     this.dragCurrent = { ...this.dragStart };
+    this.suppressTap = false;
 
     if (e.button === 1 || e.button === 2) {
       this.dragging = e.button === 1 ? 'pan' : 'none';
@@ -387,13 +433,76 @@ export class GameEngine {
       this.dragging = 'mark';
       return;
     }
+    if (isTouch) {
+      // One finger drags the world; a tap selects (or gives an order).
+      // Holding still for a moment is the touch equivalent of a right click.
+      this.dragging = this.tool === 'select' ? 'pan' : 'none';
+      this.hoverTile = {
+        tx: Math.max(0, Math.min(this.world.width - 1, worldToTileX(wp.x))),
+        ty: Math.max(0, Math.min(this.world.height - 1, worldToTileY(wp.y))),
+      };
+      if (this.tool === 'select' && !this.orderMode) {
+        this.longPress = setTimeout(() => {
+          this.longPress = null;
+          this.suppressTap = true;
+          this.dragging = 'none';
+          this.rightClick(wp.x, wp.y);
+        }, 420);
+      }
+      return;
+    }
     if (this.tool === 'select') this.dragging = 'select';
     else this.dragging = 'none';
+  }
+
+  private beginPinch() {
+    const pts = [...this.pointers.values()];
+    if (pts.length < 2) return;
+    const dx = pts[0].x - pts[1].x;
+    const dy = pts[0].y - pts[1].y;
+    this.pinch = {
+      dist: Math.max(1, Math.hypot(dx, dy)),
+      midX: (pts[0].x + pts[1].x) / 2,
+      midY: (pts[0].y + pts[1].y) / 2,
+    };
+  }
+
+  private cancelLongPress() {
+    if (this.longPress) {
+      clearTimeout(this.longPress);
+      this.longPress = null;
+    }
+  }
+
+  pointerCancel(e: PointerEvent) {
+    this.pointers.delete(e.pointerId);
+    this.cancelLongPress();
+    if (this.pointers.size < 2) this.pinch = null;
+    this.dragging = 'none';
+    this.dragStart = null;
+    this.dragCurrent = null;
   }
 
   pointerMove(e: PointerEvent, rect: DOMRect) {
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
+
+    if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, { x: sx, y: sy });
+    if (this.pointers.size >= 2) {
+      this.cancelLongPress();
+      const pts = [...this.pointers.values()];
+      const dist = Math.max(1, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y));
+      const midX = (pts[0].x + pts[1].x) / 2;
+      const midY = (pts[0].y + pts[1].y) / 2;
+      if (this.pinch) {
+        this.followId = -1;
+        this.cam.applyZoom(midX, midY, dist / this.pinch.dist);
+        this.cam.panBy(midX - this.pinch.midX, midY - this.pinch.midY);
+      }
+      this.pinch = { dist, midX, midY };
+      return;
+    }
+
     const wp = this.cam.screenToWorld(sx, sy);
     this.hoverTile = {
       tx: Math.max(0, Math.min(this.world.width - 1, worldToTileX(wp.x))),
@@ -401,7 +510,10 @@ export class GameEngine {
     };
     this.hoveredCharId = this.characterAt(wp.x, wp.y)?.id ?? -1;
 
-    if (this.dragStart) this.dragCurrent = { x: sx, y: sy, wx: wp.x, wy: wp.y };
+    if (this.dragStart) {
+      this.dragCurrent = { x: sx, y: sy, wx: wp.x, wy: wp.y };
+      if (Math.hypot(sx - this.dragStart.x, sy - this.dragStart.y) > 8) this.cancelLongPress();
+    }
 
     if (this.dragging === 'pan' && this.dragStart) {
       this.followId = -1;
@@ -418,6 +530,18 @@ export class GameEngine {
   pointerUp(e: PointerEvent, rect: DOMRect) {
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
+    const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
+    const wasPinching = this.pointers.size >= 2;
+    this.pointers.delete(e.pointerId);
+    this.cancelLongPress();
+    if (this.pointers.size < 2) this.pinch = null;
+    if (wasPinching) {
+      this.dragging = 'none';
+      this.dragStart = null;
+      this.dragCurrent = null;
+      return;
+    }
+
     const wp = this.cam.screenToWorld(sx, sy);
     const start = this.dragStart;
     const wasDragging = this.dragging;
@@ -425,11 +549,39 @@ export class GameEngine {
     this.dragStart = null;
     this.dragCurrent = null;
 
+    if (this.suppressTap) {
+      this.suppressTap = false;
+      return;
+    }
+
     if (e.button === 2) {
       this.rightClick(wp.x, wp.y);
       return;
     }
     if (e.button === 1) return;
+
+    if (isTouch) {
+      const moved = start ? Math.hypot(sx - start.x, sy - start.y) : 0;
+      if (wasDragging === 'mark' && start) {
+        this.applyMarkRect(start.wx, start.wy, wp.x, wp.y, this.tool === 'mark');
+        return;
+      }
+      if (moved > 10) return; // it was a pan, not a tap
+      if (this.tool === 'build') {
+        this.tryPlaceBuilding(wp.x, wp.y, false);
+        return;
+      }
+      if (this.tool === 'demolish') {
+        this.demolishAt(wp.x, wp.y);
+        return;
+      }
+      if (this.orderMode) {
+        this.rightClick(wp.x, wp.y);
+        return;
+      }
+      this.leftClick(wp.x, wp.y, false);
+      return;
+    }
 
     if (wasDragging === 'mark' && start) {
       this.applyMarkRect(start.wx, start.wy, wp.x, wp.y, this.tool === 'mark');
@@ -451,6 +603,12 @@ export class GameEngine {
       return;
     }
     this.leftClick(wp.x, wp.y, e.shiftKey);
+  }
+
+  /** Zoom buttons for touch, where there is no wheel. */
+  zoomStep(dir: number) {
+    this.cam.applyZoom(this.cam.viewW / 2, this.cam.viewH / 2, dir > 0 ? 1.25 : 0.8);
+    this.emit();
   }
 
   wheel(e: WheelEvent, rect: DOMRect) {

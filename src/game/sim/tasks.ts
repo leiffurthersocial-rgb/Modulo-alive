@@ -18,6 +18,7 @@ import {
   idx,
   log,
   removeNode,
+  invalidateStorageCapacity,
   spendResources,
   storageCapacity,
   storedTotal,
@@ -87,6 +88,7 @@ export function performWork(
   dt: number,
   fx: Fx
 ): WorkResult {
+  wearTool(w, c, dt, fx);
   const speed = workSpeed(c, j.work);
   const total = jobWorkAmount(w, j);
   const units = speed * dt * 2.2;
@@ -119,7 +121,9 @@ export function performWork(
         const mult = yieldMultiplier(c, j.work);
         const amount = Math.max(1, Math.round(n.amount * mult));
         pickUp(w, c, spec.res, amount, fx);
-        if (spec.extra && Math.random() < spec.extra.chance) {
+        // Bark and cordage are only stripped when there is a use for them —
+        // otherwise a long clearing job would bury the stores in fiber.
+        if (spec.extra && w.stock[spec.extra.res] < 200 && Math.random() < spec.extra.chance) {
           addResource(w, spec.extra.res, spec.extra.amount);
         }
         n.depleted = true;
@@ -163,6 +167,7 @@ export function performWork(
       if (b.progress >= 1) {
         b.state = 'built';
         b.hp = b.maxHp;
+        invalidateStorageCapacity(w);
         if (def.farm && b.farm) for (const cell of b.farm) cell.tilled = true;
         for (let y = b.ty; y < b.ty + b.h; y++) {
           for (let x = b.tx; x < b.tx + b.w; x++) {
@@ -187,7 +192,8 @@ export function performWork(
     case 'repair': {
       const b = w.buildings.get(j.targetId);
       if (!b || b.state !== 'built') return 'fail';
-      j.progress += units / total;
+      const repairSkill = 1 + c.skills.repair.level * 0.06;
+      j.progress += (units * repairSkill) / total;
       b.hp = Math.min(b.maxHp, b.hp + units * 2.5);
       b.activeT = 0.4;
       addXp(c, 'repair', dt * 1.2);
@@ -262,8 +268,11 @@ export function performWork(
           Math.round(crop.yieldAmount * yieldMultiplier(c, 'farming') * tendBonus)
         );
         pickUp(w, c, crop.yieldRes, amount, fx);
-        // Farming must be seed-positive, or the fields quietly stop.
-        addResource(w, 'seeds', 1 + (Math.random() < crop.seedReturn ? 1 : 0));
+        // Farming must be seed-positive, or the fields quietly stop — but the
+        // surplus is left in the field rather than filling the storehouse.
+        if (w.stock.seeds < 40) {
+          addResource(w, 'seeds', 1 + (Math.random() < crop.seedReturn ? 1 : 0));
+        }
         cell.crop = null;
         cell.growth = 0;
         cell.tended = 0;
@@ -380,6 +389,15 @@ export function performWork(
 }
 
 /** Food first: the fields only turn to fiber and medicine once the larder is safe. */
+/** Tools wear out with use — roughly one set per two and a half game days of work. */
+function wearTool(w: World, c: Character, dt: number, fx: Fx) {
+  if (!c.equipment.tool) return;
+  if (Math.random() > dt * 0.0006) return;
+  c.equipment.tool = null;
+  fx.float(c.x, c.y - 26, 'tools broke', '#ff9d7a');
+  log(w, 'info', 'Tools Broke', `${c.name}'s tools finally gave out mid-job.`, [c.id]);
+}
+
 function chooseCrop(w: World) {
   const pop = w.characters.filter((c) => c.alive).length || 1;
   const foodSecure = w.stock.food + w.stock.rawFood > pop * 20;

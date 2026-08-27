@@ -189,7 +189,6 @@ export function createCharacter(
     lastSocialAt: 0,
     workT: 0,
     bob: rng.range(0, 6.28),
-    thought: '',
   };
   c.maxHealth = maxHealthFor(c);
   c.health = c.maxHealth;

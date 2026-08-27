@@ -8,8 +8,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "simtest": "tsx scripts/simtest.ts",
-    "simtest:idle": "tsx scripts/idlerun.ts"
+    "simtest": "tsx scripts/simtest.ts"
   },
   "dependencies": {
     "next": "15.1.6",

@@ -37,6 +37,7 @@ import { say } from './dialogue';
 import { hourOfDay, isNight } from './time';
 import type { Fx } from './fx';
 import { fortune } from './modifiers';
+import { settlementSnapshot } from './progression';
 
 /** Runs roughly once per game hour. */
 export function eventTick(w: World, fx: Fx) {
@@ -155,12 +156,19 @@ function buildEventTable(w: World, living: Character[]): EventOption[] {
     }
   }
 
-  if (w.stock.tools > 0) {
+  const toolUsers = living.filter((c) => c.equipment.tool);
+  if (w.stock.tools > 0 || toolUsers.length) {
     out.push({
       weight: 6,
       run: (w) => {
-        takeResource(w, 'tools', 1);
-        log(w, 'bad', 'Equipment Broke', 'A set of tools finally gave out mid-job.', []);
+        if (toolUsers.length) {
+          const c = rollPick(w, toolUsers);
+          c.equipment.tool = null;
+          log(w, 'bad', 'Equipment Broke', `${c.name}'s tools snapped mid-swing.`, [c.id]);
+        } else {
+          takeResource(w, 'tools', 1);
+          log(w, 'bad', 'Equipment Broke', 'A set of tools rusted through in storage.', []);
+        }
       },
     });
   }
@@ -230,8 +238,9 @@ function buildEventTable(w: World, living: Character[]): EventOption[] {
     });
   }
 
-  // A stranger asks to join — only if the camp can plausibly feed them.
-  if (food > pop * 16 && pop < 14) {
+  // A stranger asks to join — only if the camp can plausibly feed and house them.
+  const snap = settlementSnapshot(w);
+  if (food > pop * 16 && pop < 16 && snap.beds > pop) {
     out.push({
       weight: 4,
       run: (w, fx) => {

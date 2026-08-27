@@ -34,7 +34,6 @@ export const JOB_WORK: Record<JobType, WorkType> = {
   gatherWater: 'hauling',
   haulToSite: 'hauling',
   build: 'construction',
-  deconstruct: 'construction',
   till: 'farming',
   plant: 'farming',
   tend: 'farming',
@@ -53,7 +52,6 @@ export const JOB_LABEL: Record<JobType, string> = {
   gatherWater: 'Fetching water',
   haulToSite: 'Hauling materials',
   build: 'Building',
-  deconstruct: 'Dismantling',
   till: 'Tilling soil',
   plant: 'Planting',
   tend: 'Tending crops',
@@ -105,6 +103,33 @@ export function hasJob(
       return true;
   }
   return false;
+}
+
+/**
+ * A one-pass index of "does a job already exist for this target".
+ *
+ * Job generation walks thousands of nodes and hundreds of buildings; asking
+ * the job map about each one individually is quadratic and was the single
+ * biggest cost in a large settlement.
+ */
+class JobIndex {
+  private keys = new Set<string>();
+
+  constructor(w: World) {
+    for (const j of w.jobs.values()) this.keys.add(key(j.type, j.targetId, j.cellIndex));
+  }
+
+  has(type: JobType, targetId: number, cellIndex = -1) {
+    return this.keys.has(key(type, targetId, cellIndex));
+  }
+
+  add(type: JobType, targetId: number, cellIndex = -1) {
+    this.keys.add(key(type, targetId, cellIndex));
+  }
+}
+
+function key(type: JobType, targetId: number, cellIndex: number) {
+  return `${type}|${targetId}|${cellIndex}`;
 }
 
 export function jobCount(w: World, type: JobType): number {
@@ -167,17 +192,22 @@ export function deleteJob(w: World, jobId: number) {
 export function generateJobs(w: World) {
   if (w.jobs.size >= MAX_JOBS) return;
 
+  const index = new JobIndex(w);
   const pop = w.characters.filter((c) => c.alive).length || 1;
   const food = w.stock.food + w.stock.rawFood;
   const capFree = storageCapacity(w) - storedTotal(w);
 
-  /* --- Marked nodes: always honoured, whatever the stock levels --- */
+  const foodCritical = food < pop * 6;
+
+  /* --- Marked nodes: always honoured, whatever the stock levels.
+         They step aside for survival work when the larder is empty, so a
+         large clearing order cannot starve the camp. --- */
   for (const n of w.nodes.values()) {
     if (!n.marked || n.depleted) continue;
     const spec = NODE_SPEC[n.kind];
     const type: JobType =
       spec.work === 'woodcutting' ? 'chop' : spec.work === 'mining' ? 'mine' : 'forage';
-    if (hasJob(w, type, n.id)) continue;
+    if (index.has(type, n.id)) continue;
     const at = adjacentFreeTile(w, n.tx, n.ty);
     if (!at) continue;
     createJob(w, type, {
@@ -185,8 +215,9 @@ export function generateJobs(w: World) {
       targetId: n.id,
       tx: at.tx,
       ty: at.ty,
-      priority: 58,
+      priority: foodCritical && type !== 'forage' ? 20 : 58,
     });
+    index.add(type, n.id);
     if (w.jobs.size >= MAX_JOBS) return;
   }
 
@@ -204,8 +235,9 @@ export function generateJobs(w: World) {
       const have = b.delivered[res] ?? 0;
       if (have >= need) continue;
       needsMaterial = true;
-      if (hasJob(w, 'haulToSite', b.id, resIndex(res))) continue;
+      if (index.has('haulToSite', b.id, resIndex(res))) continue;
       if (w.stock[res] <= 0) continue;
+      index.add('haulToSite', b.id, resIndex(res));
       createJob(w, 'haulToSite', {
         targetKind: 'building',
         targetId: b.id,
@@ -219,7 +251,8 @@ export function generateJobs(w: World) {
     }
     if (!needsMaterial) {
       missingAll = false;
-      if (!hasJob(w, 'build', b.id)) {
+      if (!index.has('build', b.id)) {
+        index.add('build', b.id);
         createJob(w, 'build', {
           targetKind: 'building',
           targetId: b.id,
@@ -240,7 +273,8 @@ export function generateJobs(w: World) {
       const cx = b.tx + (i % b.w);
       const cy = b.ty + Math.floor(i / b.w);
       if (cell.crop && cell.growth >= 1) {
-        if (hasJob(w, 'harvest', b.id, i)) continue;
+        if (index.has('harvest', b.id, i)) continue;
+        index.add('harvest', b.id, i);
         createJob(w, 'harvest', {
           targetKind: 'farmCell',
           targetId: b.id,
@@ -251,7 +285,8 @@ export function generateJobs(w: World) {
         });
       } else if (!cell.crop && cell.tilled) {
         if (w.stock.seeds < 1) continue;
-        if (hasJob(w, 'plant', b.id, i)) continue;
+        if (index.has('plant', b.id, i)) continue;
+        index.add('plant', b.id, i);
         createJob(w, 'plant', {
           targetKind: 'farmCell',
           targetId: b.id,
@@ -261,7 +296,8 @@ export function generateJobs(w: World) {
           priority: 40,
         });
       } else if (!cell.tilled) {
-        if (hasJob(w, 'till', b.id, i)) continue;
+        if (index.has('till', b.id, i)) continue;
+        index.add('till', b.id, i);
         createJob(w, 'till', {
           targetKind: 'farmCell',
           targetId: b.id,
@@ -271,7 +307,8 @@ export function generateJobs(w: World) {
           priority: 36,
         });
       } else if (cell.crop && cell.growth < 1 && cell.tended < 30) {
-        if (hasJob(w, 'tend', b.id, i)) continue;
+        if (index.has('tend', b.id, i)) continue;
+        index.add('tend', b.id, i);
         createJob(w, 'tend', {
           targetKind: 'farmCell',
           targetId: b.id,
@@ -308,11 +345,12 @@ export function generateJobs(w: World) {
     const needsCare = c.injuries.some((i) => !i.treated) || c.sickness > 0.25;
     if (!needsCare) continue;
     if (w.stock.medicine < 1) continue;
-    if (hasJob(w, 'treat', c.id)) continue;
+    if (index.has('treat', c.id)) continue;
     const bed = bestBuilding(w, (b) => !!buildingDef(b.def).medical);
     if (!bed) continue;
     const at = accessTile(w, bed);
     if (!at) continue;
+    index.add('treat', c.id);
     createJob(w, 'treat', {
       targetKind: 'character',
       targetId: c.id,
@@ -335,7 +373,7 @@ export function generateJobs(w: World) {
           if (w.stock[k] < (r.input[k] ?? 0) * 2) ok = false;
         }
         if (!ok) continue;
-        if (hasJob(w, 'craft', bench.id, recipeIndex(r.id))) continue;
+        if (index.has('craft', bench.id, recipeIndex(r.id))) continue;
         const at = accessTile(w, bench);
         if (!at) continue;
         createJob(w, 'craft', {
@@ -381,10 +419,11 @@ export function generateJobs(w: World) {
   for (const b of w.buildings.values()) {
     if (b.state !== 'built') continue;
     if (b.hp >= b.maxHp * 0.9) continue;
-    if (hasJob(w, 'repair', b.id)) continue;
+    if (index.has('repair', b.id)) continue;
     if (w.stock.wood < 3) break;
     const at = accessTile(w, b);
     if (!at) continue;
+    index.add('repair', b.id);
     createJob(w, 'repair', {
       targetKind: 'building',
       targetId: b.id,
@@ -394,32 +433,40 @@ export function generateJobs(w: World) {
     });
   }
 
-  /* --- Autonomous gathering keeps the camp alive without micromanagement --- */
-  if (capFree > 45) {
-    // Food first, and the hungrier the camp is the more hands it puts on it.
-    const forageTarget = food < pop * 6 ? 6 : food < pop * 14 ? 4 : food < pop * 22 ? 2 : 0;
-    const foragePriority = food < pop * 6 ? 94 : food < pop * 14 ? 66 : 40;
+  /* --- Autonomous gathering keeps the camp alive without micromanagement.
+         Food is deliberately outside the storage-headroom gate: a full store
+         must never be able to stop the camp feeding itself. --- */
+  {
+    const forageTarget = foodCritical ? 6 : food < pop * 14 ? 4 : food < pop * 22 ? 2 : 0;
+    const foragePriority = foodCritical ? 94 : food < pop * 14 ? 66 : 40;
     let guard = 0;
     while (forageCount(w, 'berryBush') < forageTarget && guard++ < 8) {
-      if (!autoNodeJob(w, 'forage', (n) => n.kind === 'berryBush', foragePriority)) break;
+      if (!autoNodeJob(w, index, 'forage', (n) => n.kind === 'berryBush', foragePriority)) break;
     }
+  }
+  if (capFree > 45) {
     if (w.stock.herbs < 12 && forageCount(w, 'herbPatch') < 2) {
-      autoNodeJob(w, 'forage', (n) => n.kind === 'herbPatch', 26);
+      autoNodeJob(w, index, 'forage', (n) => n.kind === 'herbPatch', 26);
     }
     if (w.stock.fiber < 30 && forageCount(w, 'reeds') < 2) {
-      autoNodeJob(w, 'forage', (n) => n.kind === 'reeds', 24);
+      autoNodeJob(w, index, 'forage', (n) => n.kind === 'reeds', 24);
     }
     if (w.stock.wood < 90 && jobCount(w, 'chop') < 3 && food > pop * 5) {
       autoNodeJob(
         w,
+        index,
         'chop',
         (n) => n.kind === 'tree' || n.kind === 'pine' || n.kind === 'log' || n.kind === 'deadTree',
         w.stock.wood < 25 ? 66 : 34
       );
     }
-    if (w.stock.stone < 45 && jobCount(w, 'mine') < 2 && food > pop * 5) {
-      autoNodeJob(w, 'mine', (n) => n.kind === 'rock', w.stock.stone < 12 ? 60 : 32);
+    if (w.stock.stone < 80 && jobCount(w, 'mine') < 2 && food > pop * 5) {
+      autoNodeJob(w, index, 'mine', (n) => n.kind === 'rock', w.stock.stone < 20 ? 62 : 34);
     }
+  } else if (w.stock.stone < 20 && jobCount(w, 'mine') < 1 && food > pop * 5) {
+    // Even with the stores overflowing, a settlement out of stone still needs
+    // stone — the per-resource ceiling guarantees there is room for it.
+    autoNodeJob(w, index, 'mine', (n) => n.kind === 'rock', 64);
   }
 }
 
@@ -437,7 +484,6 @@ const RES_ORDER: ResourceType[] = [
   'herbs',
   'seeds',
   'tools',
-  'hide',
 ];
 
 function recipeIndex(id: string): number {
@@ -488,6 +534,7 @@ function findWaterAccess(w: World): { tx: number; ty: number } | null {
  */
 function autoNodeJob(
   w: World,
+  index: JobIndex,
   type: JobType,
   pred: (n: ResourceNode) => boolean,
   priority: number
@@ -498,7 +545,7 @@ function autoNodeJob(
   let bestD = Infinity;
   for (const n of w.nodes.values()) {
     if (n.depleted || !pred(n)) continue;
-    if (hasJob(w, type, n.id)) continue;
+    if (index.has(type, n.id)) continue;
     const dx = tileToWorldX(n.tx) - cx;
     const dy = tileToWorldY(n.ty) - cy;
     const d = dx * dx + dy * dy;
@@ -510,6 +557,7 @@ function autoNodeJob(
   if (!best) return false;
   const at = adjacentFreeTile(w, best.tx, best.ty);
   if (!at) return false;
+  index.add(type, best.id);
   createJob(w, type, {
     targetKind: 'node',
     targetId: best.id,

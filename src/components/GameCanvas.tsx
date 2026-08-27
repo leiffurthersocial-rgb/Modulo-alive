@@ -22,7 +22,13 @@ export default function GameCanvas() {
 
     const rect = () => canvas.getBoundingClientRect();
     const onDown = (e: PointerEvent) => {
-      canvas.setPointerCapture(e.pointerId);
+      // Safari (and synthetic events) can reject capture; it is an
+      // optimisation, never a requirement.
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch {
+        /* capture unavailable for this pointer */
+      }
       engine.pointerDown(e, rect());
     };
     const onMove = (e: PointerEvent) => engine.pointerMove(e, rect());
@@ -34,10 +40,13 @@ export default function GameCanvas() {
       }
       engine.pointerUp(e, rect());
     };
+    const onCancel = (e: PointerEvent) => engine.pointerCancel(e);
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       engine.wheel(e, rect());
     };
+    // iOS fires its own pinch/double-tap gestures over the canvas otherwise.
+    const blockGesture = (e: Event) => e.preventDefault();
     const onContext = (e: Event) => e.preventDefault();
     const onKeyDown = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -50,6 +59,13 @@ export default function GameCanvas() {
     canvas.addEventListener('pointerdown', onDown);
     canvas.addEventListener('pointermove', onMove);
     canvas.addEventListener('pointerup', onUp);
+    canvas.addEventListener('pointercancel', onCancel);
+    canvas.addEventListener('gesturestart', blockGesture);
+    canvas.addEventListener('gesturechange', blockGesture);
+    canvas.addEventListener('gestureend', blockGesture);
+    canvas.addEventListener('dblclick', blockGesture);
+    canvas.addEventListener('touchstart', blockGesture, { passive: false });
+    canvas.addEventListener('touchmove', blockGesture, { passive: false });
     canvas.addEventListener('wheel', onWheel, { passive: false });
     canvas.addEventListener('contextmenu', onContext);
     window.addEventListener('keydown', onKeyDown);
@@ -62,6 +78,13 @@ export default function GameCanvas() {
       canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointermove', onMove);
       canvas.removeEventListener('pointerup', onUp);
+      canvas.removeEventListener('pointercancel', onCancel);
+      canvas.removeEventListener('gesturestart', blockGesture);
+      canvas.removeEventListener('gesturechange', blockGesture);
+      canvas.removeEventListener('gestureend', blockGesture);
+      canvas.removeEventListener('dblclick', blockGesture);
+      canvas.removeEventListener('touchstart', blockGesture);
+      canvas.removeEventListener('touchmove', blockGesture);
       canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('contextmenu', onContext);
       window.removeEventListener('keydown', onKeyDown);

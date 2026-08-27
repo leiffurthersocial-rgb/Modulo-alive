@@ -176,7 +176,7 @@ export const NODE_SPEC: Record<ResourceNode['kind'], NodeSpec> = {
   },
   rock: {
     hp: 130,
-    amount: 30,
+    amount: 42,
     res: 'stone',
     regrowHours: -1,
     work: 'mining',
@@ -228,13 +228,29 @@ export const NODE_SPEC: Record<ResourceNode['kind'], NodeSpec> = {
 /* Stockpile                                                           */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Storage capacity is read on every resource transfer, and a late-game
+ * settlement can have hundreds of buildings, so it is memoised and
+ * invalidated explicitly whenever the building set changes.
+ */
+const capacityCache = new WeakMap<World, { version: number; value: number }>();
+const capacityVersion = new WeakMap<World, number>();
+
+export function invalidateStorageCapacity(w: World) {
+  capacityVersion.set(w, (capacityVersion.get(w) ?? 0) + 1);
+}
+
 export function storageCapacity(w: World): number {
+  const version = capacityVersion.get(w) ?? 0;
+  const cached = capacityCache.get(w);
+  if (cached && cached.version === version) return cached.value;
   let cap = 200; // what fits around the fire and under the tarps
   for (const b of w.buildings.values()) {
     if (b.state !== 'built') continue;
     const d = buildingDef(b.def);
     if (d.storage) cap += d.storage;
   }
+  capacityCache.set(w, { version, value: cap });
   return cap;
 }
 
@@ -244,12 +260,31 @@ export function storedTotal(w: World): number {
   return t;
 }
 
+/**
+ * Storage rules. Food keeps a reserved slice of the store, and no single
+ * resource may swallow it all — otherwise a big timber haul can lock the
+ * settlement out of the stone it needs to build more storage.
+ */
+const RESERVED_FOR_FOOD = 0.18;
+const PER_RESOURCE_SHARE = 0.4;
+const FOOD_RESOURCES: ResourceType[] = ['food', 'rawFood', 'medicine', 'herbs'];
+
+export function resourceCeiling(w: World, res: ResourceType): number {
+  const cap = storageCapacity(w);
+  if (FOOD_RESOURCES.indexOf(res) >= 0) return cap;
+  if (res === 'seeds') return 40;
+  return Math.max(120, cap * PER_RESOURCE_SHARE);
+}
+
 /** @returns the amount actually stored (capacity may clip it). */
 export function addResource(w: World, res: ResourceType, amount: number): number {
   if (amount <= 0) return 0;
   const cap = storageCapacity(w);
-  const free = Math.max(0, cap - storedTotal(w));
-  const put = Math.min(amount, free);
+  const isFood = FOOD_RESOURCES.indexOf(res) >= 0;
+  const usable = isFood ? cap : cap * (1 - RESERVED_FOR_FOOD);
+  const globalFree = Math.max(0, usable - storedTotal(w));
+  const ownFree = Math.max(0, resourceCeiling(w, res) - w.stock[res]);
+  const put = Math.min(amount, globalFree, ownFree);
   w.stock[res] += put;
   return put;
 }
@@ -356,6 +391,7 @@ export function placeBuilding(
     }
   }
   w.buildings.set(b.id, b);
+  invalidateStorageCapacity(w);
   for (let y = ty; y < ty + d.h; y++) {
     for (let x = tx; x < tx + d.w; x++) {
       w.buildingAt[idx(w, x, y)] = b.id;
@@ -374,6 +410,7 @@ export function removeBuilding(w: World, b: Building) {
     }
   }
   w.buildings.delete(b.id);
+  invalidateStorageCapacity(w);
 }
 
 export function buildingCenterX(b: Building) {
@@ -486,22 +523,6 @@ export function nearestNode(
     }
   }
   return best;
-}
-
-/** Total light contribution at a tile (0..1+), used by AI and rendering. */
-export function lightAt(w: World, x: number, y: number): number {
-  let l = 0;
-  for (const b of w.buildings.values()) {
-    if (b.state !== 'built') continue;
-    const d = buildingDef(b.def);
-    if (!d.light) continue;
-    const dx = buildingCenterX(b) - x;
-    const dy = buildingCenterY(b) - y;
-    const r = d.light * TILE;
-    const dd = Math.sqrt(dx * dx + dy * dy);
-    if (dd < r) l += 1 - dd / r;
-  }
-  return l;
 }
 
 /* ------------------------------------------------------------------ */

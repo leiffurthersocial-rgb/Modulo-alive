@@ -146,7 +146,7 @@ export default function CharacterPanel({ character }: { character: Character }) 
               : 'Nothing'}
           </div>
           <div className="carry">
-            Equipment: {c.equipment.tool ? c.equipment.tool : 'none'}
+            Equipment: {c.equipment.tool ? 'Tool set (+20% work speed)' : 'Bare hands'}
           </div>
         </div>
       )}

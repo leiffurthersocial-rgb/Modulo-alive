@@ -1,6 +1,6 @@
 import type { Character, Injury, World } from '../core/types';
 import { clamp } from '../core/util';
-import { log, roll, rollPick, rollRange } from './world';
+import { addResource, log, roll, rollPick, rollRange } from './world';
 import { toughness } from './modifiers';
 import { grieve } from './relationships';
 import { say } from './dialogue';
@@ -80,7 +80,14 @@ export function kill(w: World, c: Character, cause: string, fx: Fx) {
   c.health = 0;
   c.path = [];
   c.jobId = -1;
-  c.carrying = null;
+  if (c.carrying) {
+    addResource(w, c.carrying.res, c.carrying.amount);
+    c.carrying = null;
+  }
+  if (c.equipment.tool) {
+    addResource(w, 'tools', 1);
+    c.equipment.tool = null;
+  }
   c.expedition = null;
   c.deathCause = cause;
   c.deathDay = Math.floor(w.time.minutes / 1440) + 1;

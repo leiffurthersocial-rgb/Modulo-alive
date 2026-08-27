@@ -47,7 +47,7 @@ export const SITE_PROFILES: Record<ExplorationSite['kind'], SiteProfile> = {
   },
   huntingGround: {
     label: 'Hunting Ground',
-    loot: { rawFood: [12, 40], hide: [2, 8] },
+    loot: { rawFood: [14, 44], fiber: [3, 10] },
     searchHours: 2.8,
     desc: 'Tracks everywhere. Something big passes through here.',
   },
@@ -153,7 +153,11 @@ export function resolveSearch(w: World, c: Character, site: ExplorationSite, fx:
 
   // Danger roll — bravery, endurance and luck all matter here.
   const exposure =
-    site.danger * courageFactor(c) * (1 - (c.stats.endurance - 5) * 0.03) * (1 / luck);
+    site.danger *
+    courageFactor(c) *
+    (1 - (c.stats.endurance - 5) * 0.03) *
+    (1 - Math.min(0.45, skillLevel(c, 'combat') * 0.05)) *
+    (1 / luck);
   const r = roll(w);
   if (r < exposure * 0.55) {
     const severity = clamp(rollRange(w, 0.15, 0.35) + site.danger * 0.6, 0.12, 0.95);
@@ -165,7 +169,9 @@ export function resolveSearch(w: World, c: Character, site: ExplorationSite, fx:
       'a bad step in the dark',
     ]);
     injure(w, c, null, severity, cause, fx);
+    addXp(c, 'combat', 14);
   } else if (r < exposure * 0.8) {
+    addXp(c, 'combat', 6);
     c.stress += 18;
     c.energy -= 12;
     log(

@@ -257,12 +257,22 @@ function drawCampfire(
 ) {
   const cx = x + w / 2;
   const cy = y + h / 2 + 2;
-  // stone ring
-  g.fillStyle = '#7a7a82';
+  // ash bed and stone ring
+  g.fillStyle = 'rgba(60,52,44,0.45)';
+  g.beginPath();
+  g.ellipse(cx, cy, 15, 10, 0, 0, Math.PI * 2);
+  g.fill();
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + variant;
+    const sx = cx + Math.cos(a) * 13;
+    const sy = cy + Math.sin(a) * 9;
+    g.fillStyle = '#8b8378';
     g.beginPath();
-    g.arc(cx + Math.cos(a) * 13, cy + Math.sin(a) * 9, 3.4, 0, Math.PI * 2);
+    g.arc(sx, sy, 3.6, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#a49a8c';
+    g.beginPath();
+    g.arc(sx - 0.8, sy - 1, 2.2, 0, Math.PI * 2);
     g.fill();
   }
   // logs
@@ -329,14 +339,31 @@ function drawPot(g: CanvasRenderingContext2D, cx: number, cy: number, time: numb
 }
 
 function drawBedroll(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  g.fillStyle = 'rgba(0,0,0,0.14)';
-  g.fillRect(x + 2, y + h - 3, w - 2, 4);
-  g.fillStyle = '#7a6a4f';
-  g.fillRect(x + 3, y + 3, w - 6, h - 6);
-  g.fillStyle = '#8d7c5c';
-  g.fillRect(x + 3, y + 3, w - 6, 4);
-  g.fillStyle = '#c8bda2';
-  g.fillRect(x + 5, y + 5, w - 10, 7);
+  const px0 = x + 3;
+  const py0 = y + 4;
+  const pw = w - 6;
+  const ph = h - 8;
+  g.fillStyle = 'rgba(0,0,0,0.2)';
+  g.fillRect(px0 + 1, py0 + ph - 1, pw, 4);
+  // mat
+  g.fillStyle = '#6e5c40';
+  g.fillRect(px0, py0, pw, ph);
+  g.fillStyle = '#8a7452';
+  g.fillRect(px0, py0, pw, 2);
+  // blanket over the lower two-thirds
+  g.fillStyle = '#5d7f9c';
+  g.fillRect(px0, py0 + ph * 0.35, pw, ph * 0.65);
+  g.fillStyle = '#4d6b85';
+  for (let i = py0 + ph * 0.45; i < py0 + ph; i += 5) g.fillRect(px0, i, pw, 1);
+  // pillow
+  g.fillStyle = '#d8cdb4';
+  g.fillRect(px0 + 1, py0 + 2, pw - 2, ph * 0.28);
+  g.fillStyle = '#bdb094';
+  g.fillRect(px0 + 1, py0 + 2 + ph * 0.28 - 1, pw - 2, 1);
+  // outline
+  g.strokeStyle = 'rgba(24,20,14,0.55)';
+  g.lineWidth = 1;
+  g.strokeRect(px0 + 0.5, py0 + 0.5, pw - 1, ph - 1);
 }
 
 function drawBed(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
@@ -360,24 +387,48 @@ function drawStockpile(
   variant: number
 ) {
   drawShadow(g, x, y, w, h);
-  const boxes = [
-    [3, 10, 14, 12],
-    [18, 6, 16, 16],
-    [8, 22, 15, 12],
-  ];
-  boxes.forEach((bx, i) => {
-    const px0 = x + (bx[0] * w) / 48;
-    const py0 = y + (bx[1] * h) / 48;
-    const bw = (bx[2] * w) / 48;
-    const bh = (bx[3] * h) / 48;
-    g.fillStyle = i % 2 === 0 ? '#9a7a4c' : '#8a6a42';
-    g.fillRect(px0, py0, bw, bh);
-    g.fillStyle = '#6d5232';
-    g.fillRect(px0, py0, bw, 2);
-    g.fillRect(px0, py0 + bh / 2 - 1, bw, 2);
-  });
-  g.fillStyle = 'rgba(120,140,110,0.55)';
-  g.fillRect(x + 2, y + 2, w - 6, 8);
+  // A tarp pegged over the back of the pile.
+  g.fillStyle = '#6e7f5c';
+  g.beginPath();
+  g.moveTo(x + 2, y + h * 0.34);
+  g.lineTo(x + w * 0.5, y + 3);
+  g.lineTo(x + w - 2, y + h * 0.3);
+  g.lineTo(x + w - 4, y + h * 0.5);
+  g.lineTo(x + 4, y + h * 0.52);
+  g.closePath();
+  g.fill();
+  g.fillStyle = '#5d6d4d';
+  g.beginPath();
+  g.moveTo(x + w * 0.5, y + 3);
+  g.lineTo(x + w - 2, y + h * 0.3);
+  g.lineTo(x + w - 4, y + h * 0.5);
+  g.lineTo(x + w * 0.5, y + h * 0.5);
+  g.closePath();
+  g.fill();
+
+  const crate = (bx: number, by: number, bw: number, bh: number, tone: string) => {
+    g.fillStyle = tone;
+    g.fillRect(bx, by, bw, bh);
+    g.fillStyle = shade(tone, 0.14);
+    g.fillRect(bx, by, bw, 2);
+    g.fillStyle = shade(tone, -0.3);
+    g.fillRect(bx, by + bh * 0.5 - 1, bw, 2);
+    g.strokeStyle = 'rgba(30,22,14,0.7)';
+    g.lineWidth = 1;
+    g.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+  };
+
+  const s = w / 48;
+  crate(x + 4 * s, y + h - 17 * s, 15 * s, 14 * s, '#9a7a4c');
+  crate(x + 20 * s, y + h - 21 * s, 17 * s, 18 * s, '#8a6a42');
+  crate(x + 11 * s, y + h - 9 * s, 13 * s, 8 * s, '#a58a5a');
+  // A couple of sacks leaning against the crates.
+  g.fillStyle = '#b5a882';
+  g.beginPath();
+  g.ellipse(x + w - 8 * s, y + h - 7 * s, 5 * s, 6 * s, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#9c9070';
+  g.fillRect(x + w - 10 * s, y + h - 3 * s, 4 * s, 2 * s);
 }
 
 function drawWorkbench(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
