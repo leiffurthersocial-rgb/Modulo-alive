@@ -267,7 +267,14 @@ export function storedTotal(w: World): number {
  */
 const RESERVED_FOR_FOOD = 0.18;
 const PER_RESOURCE_SHARE = 0.4;
-const FOOD_RESOURCES: ResourceType[] = ['food', 'rawFood', 'medicine', 'herbs'];
+const FOOD_RESOURCES: ResourceType[] = [
+  'food',
+  'rawFood',
+  'rawMeat',
+  'cookedMeat',
+  'medicine',
+  'herbs',
+];
 
 export function resourceCeiling(w: World, res: ResourceType): number {
   const cap = storageCapacity(w);
@@ -619,8 +626,16 @@ export function clampNeeds(c: Character) {
   c.hunger = clamp(c.hunger, 0, 100);
   c.energy = clamp(c.energy, 0, 100);
   c.morale = clamp(c.morale, 0, 100);
-  c.stress = clamp(c.stress, 0, 100);
   c.health = clamp(c.health, 0, c.maxHealth);
+}
+
+/** Everything edible, cooked or not. */
+export const FOOD_TYPES: ResourceType[] = ['food', 'cookedMeat', 'rawFood', 'rawMeat'];
+
+export function totalFood(w: World): number {
+  let t = 0;
+  for (const r of FOOD_TYPES) t += w.stock[r];
+  return t;
 }
 
 export function totalResources(w: World): number {

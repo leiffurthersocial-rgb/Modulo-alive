@@ -14,8 +14,8 @@ export interface TraitDef {
   workSpeed?: number;
   /** Multiplier on fatigue (energy drain) rate. */
   fatigue?: number;
-  /** Multiplier on how fast stress accumulates. */
-  stressGain?: number;
+  /** Multiplier on how hard they take bad conditions (morale drain). */
+  hardship?: number;
   /** Flat morale added per morale tick. */
   moraleDrift?: number;
   /** Multiplier on skill XP gain. */
@@ -52,10 +52,10 @@ export const TRAITS: TraitDef[] = [
   {
     id: 'lazy',
     label: 'Lazy',
-    desc: '-12% work speed, but sheds stress quickly when idle.',
+    desc: '-12% work speed, but shrugs off hardship when left alone.',
     tone: 'bad',
     workSpeed: 0.88,
-    stressGain: 0.8,
+    hardship: 0.8,
   },
   {
     id: 'brave',
@@ -68,18 +68,18 @@ export const TRAITS: TraitDef[] = [
   {
     id: 'cowardly',
     label: 'Cowardly',
-    desc: 'Frightened easily; worse outcomes when things go wrong.',
+    desc: 'Frightened easily; takes bad days hard and fares worse in danger.',
     tone: 'bad',
     courage: 1.5,
-    stressGain: 1.2,
+    hardship: 1.2,
   },
   {
     id: 'optimistic',
     label: 'Optimistic',
-    desc: 'Morale drifts upward and resists bad news.',
+    desc: 'Morale drifts upward and bad news lands softer.',
     tone: 'good',
     moraleDrift: 0.5,
-    stressGain: 0.85,
+    hardship: 0.85,
   },
   {
     id: 'pessimistic',
@@ -102,7 +102,7 @@ export const TRAITS: TraitDef[] = [
     desc: 'Gains little from company, but is content working alone.',
     tone: 'mixed',
     social: 0.45,
-    stressGain: 0.9,
+    hardship: 0.9,
   },
   {
     id: 'generous',
@@ -168,18 +168,18 @@ export const TRAITS: TraitDef[] = [
   {
     id: 'hotHeaded',
     label: 'Hot-Headed',
-    desc: 'Strong worker, but arguments start easily.',
+    desc: 'Strong worker, but takes setbacks badly and argues easily.',
     tone: 'mixed',
     workSpeed: 1.06,
-    stressGain: 1.3,
+    hardship: 1.3,
     social: 0.7,
   },
   {
     id: 'calm',
     label: 'Calm',
-    desc: 'Sheds stress quickly and rarely panics.',
+    desc: 'Takes hardship in their stride and rarely panics.',
     tone: 'good',
-    stressGain: 0.7,
+    hardship: 0.7,
     courage: 0.8,
   },
   {

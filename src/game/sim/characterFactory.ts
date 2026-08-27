@@ -156,12 +156,11 @@ export function createCharacter(
     hunger: rng.range(10, 40),
     energy: rng.range(55, 95),
     morale: rng.range(50, 72),
-    stress: rng.range(5, 25),
     health: 100,
     maxHealth: 100,
 
     injuries: [],
-    sickness: 0,
+    effects: [],
 
     alive: true,
     deathDay: 0,
@@ -204,6 +203,7 @@ export function createCharacter(
     sleepBuildingId: -1,
     lastSocialAt: 0,
     workT: 0,
+    workStreak: 0,
     bob: rng.range(0, 6.28),
   };
   c.maxHealth = maxHealthFor(c);

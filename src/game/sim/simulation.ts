@@ -11,6 +11,7 @@ import { checkMortality } from './medical';
 import { checkProgression } from './progression';
 import { removeNode } from './world';
 import { repopulateWildlife, updateWildlife } from './wildlife';
+import { hasEffect } from './effects';
 import type { Ctx } from './context';
 
 /** Fixed simulation step, in sim-seconds. */
@@ -132,7 +133,12 @@ function pruneJobs(w: World) {
     } else if (j.targetKind === 'character') {
       const c = w.characters.find((x) => x.id === j.targetId);
       if (!c || !c.alive) valid = false;
-      else if (j.type === 'treat' && !c.injuries.some((i) => !i.treated) && c.sickness <= 0.05)
+      else if (
+        j.type === 'treat' &&
+        !c.injuries.some((i) => !i.treated) &&
+        !hasEffect(c, 'fever') &&
+        !hasEffect(c, 'infected')
+      )
         valid = false;
     }
     if (j.assigned >= 0) {

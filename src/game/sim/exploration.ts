@@ -172,7 +172,7 @@ export function resolveSearch(w: World, c: Character, site: ExplorationSite, fx:
     addXp(c, 'combat', 14);
   } else if (r < exposure * 0.8) {
     addXp(c, 'combat', 6);
-    c.stress += 18;
+    c.morale -= 8;
     c.energy -= 12;
     log(
       w,

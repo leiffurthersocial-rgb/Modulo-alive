@@ -32,6 +32,7 @@ server-side state and no filesystem persistence.
 | `F` | Follow the selected survivor. `Tab` cycles survivors. |
 | `Esc` | Cancel the current tool, then open the menu. |
 | `P` | Open/close the pause menu. |
+| `I` | Open/close the stores. |
 
 On a tablet everything is reachable by touch: drag to pan, pinch to zoom, tap to
 select, and the **Order** button (or a long press) to command the selection.
@@ -56,7 +57,8 @@ src/
       simulation   the fixed-step tick that drives everything below
       ai           priority-based autonomous behaviour
       jobs/tasks   the work queue and the work itself
-      needs        hunger, energy, morale, stress, health
+      needs        hunger, energy, morale, health
+      effects      temporary status effects and what they do
       wildlife     roaming animals, and hunting them
       movement     path following and separation
       farming, construction (in tasks), exploration, medical
@@ -112,6 +114,10 @@ A few things were built to be replaced rather than rewritten:
   makes it craftable at the workbench, wearable, and drawn on the sprite.
 - **New wildlife.** `data/animals.ts` defines each species' speed, temperament and
   yields; adding one puts it in the forest, on the minimap and in the hunt.
+- **New status effects.** `data/effects.ts` is the single source: an entry there
+  becomes a real modifier on work, movement, fatigue, morale, healing, learning
+  and accident risk. Conditional effects are re-derived from the survivor's
+  condition each tick; timed ones expire on the world clock.
 
 ## Debug tools
 

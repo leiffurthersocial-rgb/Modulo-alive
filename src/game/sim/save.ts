@@ -167,6 +167,15 @@ export function deserialize(raw: any): World {
 
   // Runtime-only fields that older saves may not carry.
   for (const c of w.characters) {
+    // Stress and the illness scalar became status effects.
+    const legacy = c as unknown as { sickness?: number };
+    c.effects = c.effects ?? [];
+    if (legacy.sickness && legacy.sickness > 0.05 && !c.effects.some((e) => e.id === 'fever')) {
+      c.effects.push({ id: 'fever', until: -1, severity: legacy.sickness });
+    }
+    delete (c as unknown as Record<string, unknown>).stress;
+    delete (c as unknown as Record<string, unknown>).sickness;
+    c.workStreak = c.workStreak ?? 0;
     c.speech = null;
     c.path = c.path ?? [];
     c.pathIndex = c.pathIndex ?? 0;

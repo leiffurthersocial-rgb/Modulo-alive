@@ -370,6 +370,10 @@ export const CHAR_DIRS = 4; // down, left, right, up
 /**
  * Draw one character frame into the current transform origin (top-left of a
  * CHAR_W x CHAR_H cell).
+ *
+ * Silhouette does the heavy lifting: build changes the body outline, hair
+ * changes the head outline, and the accessory adds one unmistakable shape, so
+ * survivors stay tellable apart at any zoom.
  */
 function drawCharFrame(
   g: CanvasRenderingContext2D,
@@ -384,9 +388,9 @@ function drawCharFrame(
   const tall = a.build === 'tall';
 
   const bodyW = 8 + (heavy ? 3 : slim ? -1 : 0);
-  const headW = 9 + (heavy ? 1 : 0);
+  const headW = 9 + (heavy ? 1 : 0) - (slim ? 1 : 0);
   const headH = 8;
-  const yOff = tall ? -2 : 0;
+  const yOff = tall ? -2 : heavy ? 1 : 0;
 
   const walkPhase = frame < 4 ? frame : 0;
   const bob = walkPhase === 1 || walkPhase === 3 ? -1 : 0;
@@ -396,14 +400,17 @@ function drawCharFrame(
   const torsoTop = headTop + headH;
   const torsoH = 7 + (heavy ? 1 : 0);
   const legTop = torsoTop + torsoH;
-  const legH = 6;
+  const legH = 6 + (tall ? 1 : 0);
 
+  const accent = a.accent ?? shade(a.shirt, -0.22);
   const skinDark = shade(a.skin, -0.18);
-  const shirtDark = shade(a.shirt, -0.22);
+  const skinLight = shade(a.skin, 0.12);
+  const shirtDark = shade(a.shirt, -0.24);
   const trouserDark = shade(a.trousers, -0.2);
   const hairDark = shade(a.hair, -0.28);
+  const hairLight = shade(a.hair, 0.18);
 
-  /* legs */
+  /* ---- legs ---- */
   const legW = 3 + (heavy ? 1 : 0);
   let legAOff = 0;
   let legBOff = 0;
@@ -414,70 +421,99 @@ function drawCharFrame(
     legAOff = 1;
     legBOff = -1;
   }
-  px(g, cx - bodyW / 2 + 0, legTop, legW, legH + legAOff, a.trousers);
+  px(g, cx - bodyW / 2, legTop, legW, legH + legAOff, a.trousers);
   px(g, cx + bodyW / 2 - legW, legTop, legW, legH + legBOff, trouserDark);
-  // boots
   px(g, cx - bodyW / 2, legTop + legH + legAOff - 2, legW, 2, '#3a2f24');
   px(g, cx + bodyW / 2 - legW, legTop + legH + legBOff - 2, legW, 2, '#332920');
 
-  /* torso */
+  /* ---- torso ---- */
   px(g, cx - bodyW / 2, torsoTop, bodyW, torsoH, a.shirt);
-  px(g, cx - bodyW / 2, torsoTop, 2, torsoH, shirtDark);
+  // sleeves / side panels in the accent colour give the shirt some shape
+  px(g, cx - bodyW / 2, torsoTop, 2, torsoH, accent);
+  px(g, cx + bodyW / 2 - 2, torsoTop, 2, torsoH, accent);
   px(g, cx - bodyW / 2, torsoTop + torsoH - 1, bodyW, 1, shirtDark);
+  // collar
+  px(g, cx - 2, torsoTop, 4, 1, shade(a.shirt, 0.16));
 
-  /* body armour, worn over the shirt */
+  /* ---- body armour, worn over the shirt ---- */
   const bodyGear = eq?.body ? GEAR_MAP[eq.body] : null;
   if (bodyGear) {
     px(g, cx - bodyW / 2, torsoTop + 1, bodyW, torsoH - 1, bodyGear.color);
     px(g, cx - bodyW / 2, torsoTop + 1, bodyW, 1, bodyGear.accent);
     px(g, cx - bodyW / 2, torsoTop + torsoH - 1, bodyW, 1, bodyGear.accent);
     if (dir === 0) px(g, cx - 1, torsoTop + 1, 2, torsoH - 2, bodyGear.accent);
+  } else {
+    drawAccessory(g, a, cx, bodyW, torsoTop, torsoH, dir);
   }
 
-  /* arms */
+  /* ---- arms ---- */
   const armY = torsoTop + 1;
   const armH = torsoH - 1;
+  const sleeve = 2;
   if (working) {
     const raise = frame === 4 ? -4 : 1;
     if (dir === 1) {
-      px(g, cx - bodyW / 2 - 3, armY + raise, 3, armH, a.skin);
+      px(g, cx - bodyW / 2 - 3, armY + raise, 3, armH - sleeve, accent);
+      px(g, cx - bodyW / 2 - 3, armY + raise + armH - sleeve, 3, sleeve, a.skin);
     } else if (dir === 2) {
-      px(g, cx + bodyW / 2, armY + raise, 3, armH, a.skin);
+      px(g, cx + bodyW / 2, armY + raise, 3, armH - sleeve, accent);
+      px(g, cx + bodyW / 2, armY + raise + armH - sleeve, 3, sleeve, a.skin);
     } else {
-      px(g, cx - bodyW / 2 - 2, armY + raise, 2, armH, a.skin);
-      px(g, cx + bodyW / 2, armY + raise, 2, armH, a.skin);
+      px(g, cx - bodyW / 2 - 2, armY + raise, 2, armH - sleeve, accent);
+      px(g, cx - bodyW / 2 - 2, armY + raise + armH - sleeve, 2, sleeve, a.skin);
+      px(g, cx + bodyW / 2, armY + raise, 2, armH - sleeve, accent);
+      px(g, cx + bodyW / 2, armY + raise + armH - sleeve, 2, sleeve, a.skin);
     }
   } else {
     const swing = walkPhase === 1 ? 1 : walkPhase === 3 ? -1 : 0;
-    px(g, cx - bodyW / 2 - 2, armY + swing, 2, armH, a.skin);
-    px(g, cx + bodyW / 2, armY - swing, 2, armH, a.skin);
+    px(g, cx - bodyW / 2 - 2, armY + swing, 2, armH - sleeve, accent);
+    px(g, cx - bodyW / 2 - 2, armY + swing + armH - sleeve, 2, sleeve, a.skin);
+    px(g, cx + bodyW / 2, armY - swing, 2, armH - sleeve, accent);
+    px(g, cx + bodyW / 2, armY - swing + armH - sleeve, 2, sleeve, a.skin);
   }
 
-  /* head */
+  /* ---- head ---- */
   px(g, cx - headW / 2, headTop, headW, headH, a.skin);
   px(g, cx - headW / 2, headTop, 2, headH, skinDark);
-  // neck shadow
+  px(g, cx + headW / 2 - 2, headTop + 1, 2, headH - 2, skinLight);
   px(g, cx - 2, torsoTop - 1, 4, 1, skinDark);
 
-  /* face */
+  /* ---- face ---- */
+  const blink = frame === 2; // a single blink frame in the idle cycle
   if (dir === 0) {
-    px(g, cx - 3, headTop + 4, 2, 2, a.eyes);
-    px(g, cx + 1, headTop + 4, 2, 2, a.eyes);
+    // Brows carry most of the expression; the eyes themselves stay small so
+    // the face does not read as startled at high zoom.
+    px(g, cx - 3, headTop + 3, 2, 1, hairDark);
+    px(g, cx + 1, headTop + 3, 2, 1, hairDark);
+    if (blink) {
+      px(g, cx - 3, headTop + 5, 2, 1, skinDark);
+      px(g, cx + 1, headTop + 5, 2, 1, skinDark);
+    } else {
+      px(g, cx - 3, headTop + 4, 2, 2, a.eyes);
+      px(g, cx + 1, headTop + 4, 2, 2, a.eyes);
+    }
     px(g, cx - 1, headTop + 7, 2, 1, shade(a.skin, -0.3));
     if (a.facialHair === 'goatee') {
       px(g, cx - 2, headTop + 7, 4, 3, a.hair);
     } else if (a.facialHair === 'stubble') {
       px(g, cx - 3, headTop + 6, 6, 2, shade(a.skin, -0.25));
+    } else if (a.facialHair === 'beard') {
+      px(g, cx - headW / 2 + 1, headTop + 7, headW - 2, 3, a.hair);
+      px(g, cx - headW / 2 + 1, headTop + 7, headW - 2, 1, hairDark);
     }
   } else if (dir === 1) {
-    px(g, cx - 3, headTop + 4, 2, 2, a.eyes);
+    px(g, cx - 3, headTop + 3, 2, 1, hairDark);
+    if (!blink) px(g, cx - 3, headTop + 4, 2, 2, a.eyes);
     if (a.facialHair === 'goatee') px(g, cx - 4, headTop + 7, 3, 3, a.hair);
+    if (a.facialHair === 'beard') px(g, cx - headW / 2, headTop + 6, headW - 3, 4, a.hair);
   } else if (dir === 2) {
-    px(g, cx + 1, headTop + 4, 2, 2, a.eyes);
+    px(g, cx + 1, headTop + 3, 2, 1, hairDark);
+    if (!blink) px(g, cx + 1, headTop + 4, 2, 2, a.eyes);
     if (a.facialHair === 'goatee') px(g, cx + 1, headTop + 7, 3, 3, a.hair);
+    if (a.facialHair === 'beard') px(g, cx + 3, headTop + 6, headW - 3, 4, a.hair);
   }
 
-  /* hair */
+  /* ---- hair ---- */
   const hx = cx - headW / 2;
   switch (a.hairStyle) {
     case 'buzz':
@@ -486,22 +522,26 @@ function drawCharFrame(
       break;
     case 'short':
       px(g, hx, headTop - 2, headW, 4, a.hair);
+      px(g, hx, headTop - 2, headW, 1, hairLight);
       px(g, hx, headTop + 2, 2, 2, a.hair);
       px(g, hx + headW - 2, headTop + 2, 2, 2, a.hair);
       break;
     case 'fringe':
       px(g, hx, headTop - 2, headW, 4, a.hair);
+      px(g, hx, headTop - 2, headW, 1, hairLight);
       if (dir !== 3) px(g, hx, headTop + 2, headW - 2, 2, a.hair);
       px(g, hx, headTop + 2, 2, 3, a.hair);
       px(g, hx + headW - 2, headTop + 2, 2, 3, a.hair);
       break;
     case 'styled':
       px(g, hx, headTop - 3, headW, 5, a.hair);
-      px(g, hx + headW - 3, headTop - 4, 3, 3, a.hair);
+      px(g, hx + headW - 3, headTop - 5, 3, 4, a.hair);
+      px(g, hx, headTop - 3, headW - 3, 1, hairLight);
       px(g, hx, headTop + 2, 2, 2, hairDark);
       break;
     case 'mod':
       px(g, hx - 1, headTop - 2, headW + 2, 4, a.hair);
+      px(g, hx - 1, headTop - 2, headW + 2, 1, hairLight);
       px(g, hx - 1, headTop + 2, 3, 3, a.hair);
       px(g, hx + headW - 2, headTop + 2, 3, 3, a.hair);
       break;
@@ -511,30 +551,87 @@ function drawCharFrame(
       px(g, hx, headTop + 2, 2, 4, a.hair);
       px(g, hx + headW - 2, headTop + 2, 2, 4, a.hair);
       break;
+    case 'ponytail':
+      px(g, hx, headTop - 2, headW, 4, a.hair);
+      px(g, hx, headTop - 2, headW, 1, hairLight);
+      px(g, hx, headTop + 2, 2, 3, a.hair);
+      px(g, hx + headW - 2, headTop + 2, 2, 3, a.hair);
+      // the tail, swinging with the walk
+      px(g, cx - 1, headTop + headH - 1, 2, 5 + (walkPhase === 1 ? 1 : 0), a.hair);
+      break;
+    case 'curly':
+      px(g, hx - 1, headTop - 3, headW + 2, 5, a.hair);
+      px(g, hx - 1, headTop + 2, 3, 3, a.hair);
+      px(g, hx + headW - 2, headTop + 2, 3, 3, a.hair);
+      px(g, hx + 1, headTop - 4, 2, 2, hairLight);
+      px(g, hx + headW - 4, headTop - 4, 2, 2, hairLight);
+      break;
     case 'long':
       px(g, hx, headTop - 2, headW, 4, a.hair);
-      px(g, hx - 1, headTop + 2, 2, 7, a.hair);
-      px(g, hx + headW - 1, headTop + 2, 2, 7, a.hair);
+      px(g, hx - 1, headTop + 2, 2, 8, a.hair);
+      px(g, hx + headW - 1, headTop + 2, 2, 8, a.hair);
       break;
   }
   if (dir === 3) {
-    // back of the head: hair covers the face entirely
     px(g, hx, headTop + 1, headW, headH - 2, a.hair);
     px(g, hx, headTop + headH - 2, headW, 2, hairDark);
   }
 
-  /* headgear, drawn over the hair */
+  /* ---- headgear over the hair ---- */
   const headGear = eq?.head ? GEAR_MAP[eq.head] : null;
   if (headGear) {
-    px(g, hx - 2, headTop - 1, headW + 4, 2, headGear.color); // brim
+    px(g, hx - 2, headTop - 1, headW + 4, 2, headGear.color);
     px(g, hx - 2, headTop + 1, headW + 4, 1, headGear.accent);
-    px(g, hx + 1, headTop - 4, headW - 2, 3, headGear.color); // crown
+    px(g, hx + 1, headTop - 4, headW - 2, 3, headGear.color);
     px(g, hx + 1, headTop - 4, headW - 2, 1, headGear.accent);
+  } else if (a.accessory === 'bandana') {
+    px(g, hx, headTop - 1, headW, 2, a.accent ?? '#b5453a');
+    px(g, hx + headW - 2, headTop, 3, 3, a.accent ?? '#b5453a');
   }
 
-  /* a tool in the working hand */
+  /* ---- a tool in the working hand ---- */
   const toolGear = eq?.tool ? GEAR_MAP[eq.tool] : null;
   if (toolGear) drawHandTool(g, cx, bodyW, armY, armH, dir, frame, toolGear);
+}
+
+/** The one distinctive worn detail that makes a survivor recognisable. */
+function drawAccessory(
+  g: CanvasRenderingContext2D,
+  a: Appearance,
+  cx: number,
+  bodyW: number,
+  torsoTop: number,
+  torsoH: number,
+  dir: number
+) {
+  const accent = a.accent ?? shade(a.shirt, -0.25);
+  switch (a.accessory) {
+    case 'scarf':
+      px(g, cx - bodyW / 2, torsoTop, bodyW, 2, '#b5453a');
+      px(g, cx + bodyW / 2 - 3, torsoTop + 2, 2, 4, '#9c3a30');
+      break;
+    case 'apron':
+      px(g, cx - bodyW / 2 + 1, torsoTop + 2, bodyW - 2, torsoH - 2, '#d8cdb4');
+      px(g, cx - bodyW / 2 + 1, torsoTop + 2, bodyW - 2, 1, '#b9ad94');
+      px(g, cx - 1, torsoTop, 2, 3, '#d8cdb4');
+      break;
+    case 'satchel':
+      px(g, cx - bodyW / 2 - 1, torsoTop + torsoH - 4, bodyW + 2, 3, '#6d5236');
+      px(g, cx + bodyW / 2 - 2, torsoTop, 2, torsoH - 3, '#8a6642');
+      break;
+    case 'suspenders':
+      px(g, cx - 3, torsoTop, 2, torsoH, accent);
+      px(g, cx + 1, torsoTop, 2, torsoH, accent);
+      px(g, cx - bodyW / 2, torsoTop + torsoH - 2, bodyW, 2, '#4a3524');
+      break;
+    case 'cloak':
+      px(g, cx - bodyW / 2 - 2, torsoTop, 2, torsoH + 3, accent);
+      px(g, cx + bodyW / 2, torsoTop, 2, torsoH + 3, accent);
+      px(g, cx - bodyW / 2 - 1, torsoTop - 1, bodyW + 2, 2, accent);
+      break;
+    default:
+      break;
+  }
 }
 
 /**
@@ -553,21 +650,18 @@ function drawHandTool(
 ) {
   const working = frame >= 4;
   const raised = frame === 4;
-  // Which side the tool sits on, and which way it points.
   const side = dir === 1 ? -1 : 1;
   const gripX = cx + side * (bodyW / 2 + 1);
   const gripY = armY + (working ? (raised ? -4 : 1) : 0) + armH - 2;
 
   if (working) {
-    // Haft angled up over the shoulder on the raised frame, down on the swing.
     const len = 7;
     const dy = raised ? -len : -1;
     px(g, gripX, gripY + (raised ? dy : 0), 1, raised ? len : 4, gear.accent);
-    // Head of the tool at the far end.
     const headY = raised ? gripY + dy - 1 : gripY + 3;
     px(g, gripX - 1, headY, 3, 2, gear.color);
+    px(g, gripX - 1, headY, 3, 1, shade(gear.color, 0.2));
   } else {
-    // Carried at the side.
     px(g, gripX, gripY - 2, 1, 5, gear.accent);
     px(g, gripX - 1, gripY - 4, 3, 2, gear.color);
   }

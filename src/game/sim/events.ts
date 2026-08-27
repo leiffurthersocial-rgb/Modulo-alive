@@ -29,6 +29,7 @@ import {
   recentlyLogged,
   takeResource,
   tileToWorldX,
+  totalFood,
   tileToWorldY,
 } from './world';
 import { injure, makeSick } from './medical';
@@ -37,6 +38,7 @@ import { say } from './dialogue';
 import { hourOfDay, isNight } from './time';
 import type { Fx } from './fx';
 import { fortune } from './modifiers';
+import { applyEffect } from './effects';
 import { settlementSnapshot } from './progression';
 
 /** Runs roughly once per game hour. */
@@ -49,7 +51,7 @@ export function eventTick(w: World, fx: Fx) {
 
   // Base chance per hour, higher at night and when the camp is struggling.
   const pop = living.length;
-  const food = w.stock.food + w.stock.rawFood;
+  const food = totalFood(w);
   const strain =
     (food < pop * 4 ? 0.5 : 0) +
     (living.filter((c) => c.morale < 35).length / pop) * 0.5 +
@@ -77,7 +79,7 @@ interface EventOption {
 
 function buildEventTable(w: World, living: Character[]): EventOption[] {
   const pop = living.length;
-  const food = w.stock.food + w.stock.rawFood;
+  const food = totalFood(w);
   const buildings = findBuildings(w, (b) => b.state === 'built');
   const out: EventOption[] = [];
 
@@ -93,10 +95,7 @@ function buildEventTable(w: World, living: Character[]): EventOption[] {
   out.push({
     weight: food < pop * 3 ? 20 : 3,
     run: (w) => {
-      for (const c of living) {
-        c.morale -= 6;
-        c.stress += 5;
-      }
+      for (const c of living) c.morale -= 8;
       say(w, rollPick(w, living), 'noFood', true);
       log(
         w,
@@ -176,14 +175,16 @@ function buildEventTable(w: World, living: Character[]): EventOption[] {
   out.push({
     weight: 6,
     run: (w) => {
-      const lost = Math.min(w.stock.food, Math.round(rollRange(w, 4, 14)));
+      // Raw meat is the first thing to turn.
+      const res = w.stock.rawMeat > 4 ? 'rawMeat' : 'rawFood';
+      const lost = Math.min(w.stock[res], Math.round(rollRange(w, 4, 14)));
       if (lost <= 0) return;
-      takeResource(w, 'food', lost);
+      takeResource(w, res, lost);
       log(
         w,
         'bad',
         'Spoiled Supplies',
-        `${lost} units of food had gone bad by the time anyone checked.`,
+        `${lost} units of ${res === 'rawMeat' ? 'meat' : 'produce'} had gone bad by the time anyone checked.`,
         []
       );
     },
@@ -195,7 +196,7 @@ function buildEventTable(w: World, living: Character[]): EventOption[] {
       const c = rollPick(w, living);
       const severity = rollRange(w, 0.2, 0.55);
       injure(w, c, 'bite', severity, 'something came out of the treeline', fx);
-      for (const o of living) o.stress += 6;
+      for (const o of living) o.morale -= 3;
       log(
         w,
         'bad',
@@ -209,7 +210,7 @@ function buildEventTable(w: World, living: Character[]): EventOption[] {
   out.push({
     weight: 10,
     run: (w) => {
-      for (const c of living) c.stress += 4;
+      for (const c of living) c.morale -= 2;
       log(
         w,
         'info',
@@ -347,6 +348,7 @@ function emergentStories(w: World, fx: Fx) {
         adjustRelationship(w, c, near, 7, 'worked a long night together');
         c.energy -= 6;
         near.energy -= 4;
+        applyEffect(w, c, 'sleepDeprived', -1, 0.6);
         log(
           w,
           'story',
@@ -357,7 +359,6 @@ function emergentStories(w: World, fx: Fx) {
         fx.hearts((c.x + near.x) / 2, (c.y + near.y) / 2);
         return;
       }
-      c.stress += 8;
     }
   }
 
@@ -372,7 +373,7 @@ function emergentStories(w: World, fx: Fx) {
     const b = rollPick(w, living.filter((x) => x.id !== a.id));
     if (a && b) {
       adjustRelationship(w, a, b, -rollRange(w, 5, 12), 'accused of taking extra food');
-      a.stress += 10;
+      a.morale -= 6;
       b.morale -= 8;
       log(
         w,
@@ -389,8 +390,8 @@ function emergentStories(w: World, fx: Fx) {
     for (const c of living) {
       const f = bestFriend(w, c);
       if (f && relationship(c, f) > 88 && roll(w) < 0.3) {
-        c.morale += 8;
-        f.morale += 8;
+        applyEffect(w, c, 'inspired', 10);
+        applyEffect(w, f, 'inspired', 10);
         log(
           w,
           'story',

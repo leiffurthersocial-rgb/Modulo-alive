@@ -5,7 +5,8 @@ import { nextTierProgress, settlementSnapshot } from '@/game/sim/progression';
 import { PROGRESSION_TIERS } from '@/game/data/buildings';
 import { WORK_LABEL, WORK_TYPES } from '@/game/core/types';
 import { workCoverage } from '@/game/sim/jobs';
-import { storageCapacity, storedTotal } from '@/game/sim/world';
+import { hasEffect } from '@/game/sim/effects';
+import { storageCapacity, storedTotal, totalFood } from '@/game/sim/world';
 
 export default function Objectives() {
   const engine = useEngine();
@@ -18,7 +19,7 @@ export default function Objectives() {
 
   // At-a-glance problems, in the order they will hurt.
   const alerts: { text: string; tone: 'bad' | 'warn' }[] = [];
-  const food = w.stock.food + w.stock.rawFood;
+  const food = totalFood(w);
   if (food < living.length * 3) alerts.push({ text: 'Food is nearly gone', tone: 'bad' });
   else if (food < living.length * 8) alerts.push({ text: 'Food is running low', tone: 'warn' });
   if (snap.beds < living.length)
@@ -28,7 +29,9 @@ export default function Objectives() {
     });
   if (storedTotal(w) >= storageCapacity(w) * 0.92)
     alerts.push({ text: 'Storage is full — supplies are being wasted', tone: 'warn' });
-  const untreated = living.filter((c) => c.injuries.some((i) => !i.treated) || c.sickness > 0.2);
+  const untreated = living.filter(
+    (c) => c.injuries.some((i) => !i.treated) || hasEffect(c, 'fever') || hasEffect(c, 'infected')
+  );
   if (untreated.length)
     alerts.push({ text: `${untreated.length} need medical attention`, tone: 'bad' });
   if (w.stock.medicine < 1 && untreated.length)

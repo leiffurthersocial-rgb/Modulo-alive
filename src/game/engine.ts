@@ -38,6 +38,8 @@ import { PROGRESSION_TIERS, buildingDef } from './data/buildings';
 import { SIM_SECONDS_PER_HOUR } from './sim/tasks';
 import { eventTick } from './sim/events';
 import { injure, kill } from './sim/medical';
+import { applyEffect } from './sim/effects';
+import { EFFECT_MAP } from './data/effects';
 import { populateWildlife } from './sim/wildlife';
 import { createJob, deleteJob, hasJob, JOB_WORK } from './sim/jobs';
 import { canExplore, startExpedition } from './sim/exploration';
@@ -1251,10 +1253,10 @@ export class GameEngine {
       c.hunger = 0;
       c.energy = 100;
       c.morale = 100;
-      c.stress = 0;
       c.health = c.maxHealth;
-      c.sickness = 0;
       c.injuries = [];
+      c.effects = [];
+      c.workStreak = 0;
     }
     this.notice('Everyone restored', 'good');
   }
@@ -1285,6 +1287,18 @@ export class GameEngine {
     this.world.weather.intensity = 1;
     this.world.weather.t = 300;
     this.notice(`Weather: ${kind}`, 'info');
+    this.emit();
+  }
+
+  /** Apply a status effect to the selected survivor, for testing. */
+  debugApplyEffect(id: string, hours = 8) {
+    const c = this.world.characters.find((x) => x.id === this.selected[0]);
+    if (!c) {
+      this.notice('Select a survivor first', 'warn');
+      return;
+    }
+    applyEffect(this.world, c, id, hours);
+    this.notice(`${c.name}: ${EFFECT_MAP[id]?.label ?? id}`, 'info');
     this.emit();
   }
 

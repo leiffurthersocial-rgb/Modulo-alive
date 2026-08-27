@@ -2,6 +2,7 @@ import { TILE, type Character, type World } from '../core/types';
 import { clamp } from '../core/util';
 import { socialFactor } from './modifiers';
 import { log, recentlyLogged, roll, rollPick } from './world';
+import { applyEffect, hasEffect } from './effects';
 import { say } from './dialogue';
 import type { Fx } from './fx';
 
@@ -65,15 +66,20 @@ export function socialTick(w: World, fx: Fx) {
 
       if (roll(w) > 0.3) continue; // most passing encounters are just that
       const rel = relationship(a, b);
+      // Friction comes from real hardship: hunger, low spirits, and being
+      // worn down enough to snap at someone.
+      const worn = (x: Character) =>
+        (hasEffect(x, 'sleepDeprived') ? 0.3 : 0) + (hasEffect(x, 'overworked') ? 0.2 : 0);
       const tension =
-        (a.stress + b.stress) / 200 +
+        worn(a) +
+        worn(b) +
         (a.hunger > 78 || b.hunger > 78 ? 0.3 : 0) +
         (a.morale < 30 || b.morale < 30 ? 0.25 : 0);
       const argue = roll(w) < tension * 0.16 && rel < 70;
 
       if (argue) {
         adjustRelationship(w, a, b, -rollPickNum(w, 2, 6), 'argued');
-        a.stress += 6;
+        a.morale -= 4;
         b.morale -= 5;
         say(w, a, 'stressed', true);
         if (roll(w) < 0.2 && !recentlyLogged(w, 'The Argument', 720)) {
@@ -88,10 +94,8 @@ export function socialTick(w: World, fx: Fx) {
       } else if (roll(w) < 0.5) {
         const gain = rollPickNum(w, 0.12, 0.5) * ((socialFactor(a) + socialFactor(b)) / 2);
         adjustRelationship(w, a, b, gain, 'talked');
-        a.morale += 0.5 * socialFactor(a);
-        b.morale += 0.5 * socialFactor(b);
-        a.stress -= 0.6;
-        b.stress -= 0.6;
+        a.morale += 0.7 * socialFactor(a);
+        b.morale += 0.7 * socialFactor(b);
         a.lastSocialAt = w.time.t;
         b.lastSocialAt = w.time.t;
         if (roll(w) < 0.25) say(w, a, 'social');
@@ -121,7 +125,8 @@ export function grieve(w: World, dead: Character) {
     const rel = relationship(c, dead);
     const hit = 6 + (rel / 100) * 26;
     c.morale -= hit;
-    c.stress += hit * 0.5;
+    // Close friends carry it for days.
+    applyEffect(w, c, 'grieving', rel > 55 ? 36 : 14, clamp(rel / 100 + 0.3, 0.3, 1));
     if (rel > 55) say(w, c, 'grief', true);
   }
 }

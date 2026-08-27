@@ -1,6 +1,7 @@
 import type { Character, World } from '../core/types';
 import { pickLine } from '../data/dialogue';
 import { roll } from './world';
+import { hasEffect } from './effects';
 
 const SPEECH_DURATION = 3.4;
 
@@ -29,9 +30,9 @@ export function ambientChatter(w: World, c: Character) {
   if (c.hunger > 92) return say(w, c, 'starving');
   if (c.hunger > 72 && r < 0.5) return say(w, c, 'hungry');
   if (c.energy < 22 && r < 0.5) return say(w, c, 'tired');
-  if (c.stress > 75 && r < 0.4) return say(w, c, 'stressed');
+  if (hasEffect(c, 'sleepDeprived') && r < 0.5) return say(w, c, 'stressed');
   if (c.injuries.length && r < 0.3) return say(w, c, 'hurt');
-  if (c.sickness > 0.3 && r < 0.3) return say(w, c, 'sick');
+  if (hasEffect(c, 'fever') && r < 0.5) return say(w, c, 'sick');
   if (c.morale < 25 && r < 0.4) return say(w, c, 'miserable');
   if (c.morale > 78 && r < 0.25) return say(w, c, 'happy');
 }

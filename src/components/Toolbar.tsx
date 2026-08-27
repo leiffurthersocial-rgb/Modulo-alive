@@ -9,9 +9,13 @@ import { useEngine } from '@/store/engineStore';
 export default function Toolbar({
   buildOpen,
   onToggleBuild,
+  invOpen,
+  onToggleInventory,
 }: {
   buildOpen: boolean;
   onToggleBuild: () => void;
+  invOpen: boolean;
+  onToggleInventory: () => void;
 }) {
   const engine = useEngine();
   const tool = engine.tool;
@@ -69,6 +73,15 @@ export default function Toolbar({
       >
         <span className="tool-icon">⛏️</span>
         <span className="tool-label">Take down</span>
+      </button>
+
+      <button
+        className={`tool ${invOpen ? 'active' : ''}`}
+        onClick={onToggleInventory}
+        title="Everything the settlement has in store"
+      >
+        <span className="tool-icon">🎒</span>
+        <span className="tool-label">Stores</span>
       </button>
 
       <div className="tool-sep" />

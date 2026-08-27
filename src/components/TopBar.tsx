@@ -2,20 +2,20 @@
 
 import { useEngine } from '@/store/engineStore';
 import { RESOURCE_LABEL, type ResourceType } from '@/game/core/types';
-import { storageCapacity, storedTotal } from '@/game/sim/world';
+import { storageCapacity, storedTotal, totalFood } from '@/game/sim/world';
 import { worldClock } from '@/game/sim/time';
 import { PROGRESSION_TIERS } from '@/game/data/buildings';
 
 const SHOWN: ResourceType[] = [
   'wood',
   'stone',
+  'cookedMeat',
   'food',
+  'rawMeat',
   'rawFood',
   'fiber',
-  'herbs',
   'medicine',
   'water',
-  'seeds',
   'tools',
 ];
 
@@ -24,6 +24,8 @@ const ICONS: Record<string, string> = {
   stone: '🪨',
   food: '🍲',
   rawFood: '🥔',
+  rawMeat: '🥩',
+  cookedMeat: '🍖',
   fiber: '🧵',
   herbs: '🌿',
   medicine: '💊',
@@ -54,7 +56,7 @@ export default function TopBar({
   const used = storedTotal(w);
   const pop = w.characters.filter((c) => c.alive).length;
   const tier = PROGRESSION_TIERS.find((t) => t.level === w.progression.level);
-  const foodTotal = w.stock.food + w.stock.rawFood;
+  const foodTotal = totalFood(w);
   const lowFood = foodTotal < pop * 4;
   const full = used >= cap * 0.98;
 
@@ -93,7 +95,9 @@ export default function TopBar({
       <div className="resources">
         {SHOWN.map((r) => {
           const v = Math.floor(w.stock[r]);
-          const warn = (r === 'food' && lowFood) || (r === 'medicine' && v === 0);
+          const warn =
+            ((r === 'food' || r === 'cookedMeat') && lowFood) ||
+            (r === 'medicine' && v === 0);
           return (
             <div key={r} className={`res ${warn ? 'res-warn' : ''}`} title={RESOURCE_LABEL[r]}>
               <span className="res-icon">{ICONS[r]}</span>

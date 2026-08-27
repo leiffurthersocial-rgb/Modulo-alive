@@ -109,8 +109,10 @@ export function createWorld(seed = Math.floor(Math.random() * 0xffffffff)): Worl
 
   w.stock.wood = 30;
   w.stock.stone = 12;
-  w.stock.food = 54;
-  w.stock.rawFood = 20;
+  w.stock.food = 40;
+  w.stock.rawFood = 18;
+  w.stock.rawMeat = 8;
+  w.stock.cookedMeat = 14;
   w.stock.fiber = 16;
   w.stock.water = 20;
   w.stock.herbs = 4;

@@ -19,6 +19,7 @@ import Portrait from './Portrait';
 import { currentActivityLabel } from '@/game/sim/ai';
 import { relationshipLabel } from '@/game/sim/relationships';
 import { injurySummary } from '@/game/sim/medical';
+import { effectDefs } from '@/game/sim/effects';
 import { xpForLevel } from '@/game/sim/modifiers';
 import { STARTING_SURVIVORS } from '@/game/data/survivors';
 import { GEAR_MAP, GEAR_SLOTS, SLOT_LABEL } from '@/game/data/gear';
@@ -90,7 +91,7 @@ export default function CharacterPanel({ character }: { character: Character }) 
         <Bar value={c.hunger} color="#e2b455" label="Hunger" invert compact />
         <Bar value={c.energy} color="#63b6e8" label="Energy" compact />
         <Bar value={c.morale} color="#8ee08a" label="Morale" compact />
-        <Bar value={c.stress} color="#c98ae0" label="Stress" invert compact />
+
       </div>
 
       <div className="tabs">
@@ -132,6 +133,24 @@ export default function CharacterPanel({ character }: { character: Character }) 
             })}
           </div>
 
+          <h3 className="sub">Status</h3>
+          <div className="effects">
+            {effectDefs(c).length === 0 && <div className="hint">Nothing notable right now.</div>}
+            {effectDefs(c).map(({ def, active }) => (
+              <div key={def.id} className={`effect effect-${def.tone}`} title={def.desc}>
+                <div className="effect-head">
+                  <strong>{def.label}</strong>
+                  {active.until > 0 && (
+                    <span className="effect-time">
+                      {Math.max(1, Math.round((active.until - w.time.t) / 30))}h
+                    </span>
+                  )}
+                </div>
+                <span>{def.desc}</span>
+              </div>
+            ))}
+          </div>
+
           <h3 className="sub">Condition</h3>
           <div className="condition">
             <div>{injurySummary(c)}</div>
@@ -142,7 +161,7 @@ export default function CharacterPanel({ character }: { character: Character }) 
                 {i.bleeding > 0.05 ? ' · bleeding' : ''}
               </div>
             ))}
-            {c.sickness > 0.05 && <div className="injury">Illness ({Math.round(c.sickness * 100)}%)</div>}
+
           </div>
 
           <h3 className="sub">Carrying</h3>

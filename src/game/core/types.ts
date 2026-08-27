@@ -16,6 +16,8 @@ export const RESOURCE_TYPES = [
   'stone',
   'food',
   'rawFood',
+  'rawMeat',
+  'cookedMeat',
   'water',
   'fiber',
   'medicine',
@@ -31,8 +33,10 @@ export type Stockpile = Record<ResourceType, number>;
 export const RESOURCE_LABEL: Record<ResourceType, string> = {
   wood: 'Wood',
   stone: 'Stone',
-  food: 'Food',
-  rawFood: 'Raw Food',
+  food: 'Cooked Meals',
+  rawFood: 'Produce',
+  rawMeat: 'Raw Meat',
+  cookedMeat: 'Cooked Meat',
   water: 'Water',
   fiber: 'Fiber',
   medicine: 'Medicine',
@@ -47,6 +51,8 @@ export const STORED_RESOURCES: ResourceType[] = [
   'stone',
   'food',
   'rawFood',
+  'rawMeat',
+  'cookedMeat',
   'water',
   'fiber',
   'medicine',
@@ -347,22 +353,39 @@ export interface Equipment {
 
 export type Assignment = 'auto' | 'rest' | WorkType;
 
+export type HairStyle =
+  | 'short'
+  | 'fringe'
+  | 'styled'
+  | 'mod'
+  | 'middlePart'
+  | 'buzz'
+  | 'long'
+  | 'ponytail'
+  | 'curly';
+
+/** A worn detail that makes a survivor recognisable at a glance. */
+export type Accessory =
+  | 'none'
+  | 'scarf'
+  | 'apron'
+  | 'satchel'
+  | 'bandana'
+  | 'suspenders'
+  | 'cloak';
+
 export interface Appearance {
   skin: string;
   hair: string;
-  hairStyle:
-    | 'short'
-    | 'fringe'
-    | 'styled'
-    | 'mod'
-    | 'middlePart'
-    | 'buzz'
-    | 'long';
+  hairStyle: HairStyle;
   eyes: string;
   build: 'slim' | 'normal' | 'tall' | 'heavy';
   shirt: string;
   trousers: string;
-  facialHair?: 'goatee' | 'stubble' | 'none';
+  facialHair?: 'goatee' | 'stubble' | 'beard' | 'none';
+  /** Secondary shirt colour, used for sleeves and trim. */
+  accent?: string;
+  accessory?: Accessory;
 }
 
 export interface Injury {
@@ -389,6 +412,18 @@ export type Activity =
   | 'rest'
   | 'explore'
   | 'order';
+
+/**
+ * One live status effect on a survivor.
+ * `until` is a sim-time stamp; conditional effects use -1 and are re-derived
+ * from the survivor's condition every needs tick.
+ */
+export interface ActiveEffect {
+  id: string;
+  until: number;
+  /** 0..1, scales the effect's numbers. */
+  severity: number;
+}
 
 export type CharState =
   | 'idle'
@@ -421,12 +456,12 @@ export interface Character {
   hunger: number; // 0 (full) .. 100 (starving)
   energy: number; // 100 (rested) .. 0 (exhausted)
   morale: number; // 0..100
-  stress: number; // 0..100
   health: number;
   maxHealth: number;
 
   injuries: Injury[];
-  sickness: number; // 0..1 severity of illness
+  /** Active status effects — see data/effects.ts. */
+  effects: ActiveEffect[];
 
   alive: boolean;
   deathDay: number;
@@ -486,6 +521,8 @@ export interface Character {
   lastSocialAt: number;
   /** Accumulated work time on the current job, for animation & progress. */
   workT: number;
+  /** Unbroken game-hours of work, which is what drives Overworked. */
+  workStreak: number;
   /** Cosmetic bob used by the renderer. */
   bob: number;
 }

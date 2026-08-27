@@ -23,10 +23,12 @@ import {
   findBuildings,
   storageCapacity,
   storedTotal,
+  totalFood,
   tileToWorldX,
   tileToWorldY,
 } from './world';
 import { skillLevel } from './modifiers';
+import { hasEffect } from './effects';
 
 export const JOB_WORK: Record<JobType, WorkType> = {
   chop: 'woodcutting',
@@ -197,7 +199,7 @@ export function generateJobs(w: World, autoGather = true) {
 
   const index = new JobIndex(w);
   const pop = w.characters.filter((c) => c.alive).length || 1;
-  const food = w.stock.food + w.stock.rawFood;
+  const food = totalFood(w);
   const capFree = storageCapacity(w) - storedTotal(w);
 
   const foodCritical = food < pop * 6;
@@ -366,7 +368,9 @@ export function generateJobs(w: World, autoGather = true) {
   }
 
   /* --- Cooking --- */
-  if (w.stock.rawFood >= 4 && w.stock.food < pop * 9 && jobCount(w, 'cook') < 2) {
+  const rawStock = w.stock.rawFood + w.stock.rawMeat;
+  const cookedStock = w.stock.food + w.stock.cookedMeat;
+  if (rawStock >= 4 && cookedStock < pop * 9 && jobCount(w, 'cook') < 2) {
     const kitchen = bestBuilding(w, (b) => !!buildingDef(b.def).cooking);
     if (kitchen) {
       const at = accessTile(w, kitchen);
@@ -376,7 +380,7 @@ export function generateJobs(w: World, autoGather = true) {
           targetId: kitchen.id,
           tx: at.tx,
           ty: at.ty,
-          priority: w.stock.food < pop * 2 ? 88 : 46,
+          priority: cookedStock < pop * 2 ? 88 : 46,
         });
       }
     }
@@ -385,7 +389,8 @@ export function generateJobs(w: World, autoGather = true) {
   /* --- Medical --- */
   for (const c of w.characters) {
     if (!c.alive) continue;
-    const needsCare = c.injuries.some((i) => !i.treated) || c.sickness > 0.25;
+    const needsCare =
+      c.injuries.some((i) => !i.treated) || hasEffect(c, 'fever') || hasEffect(c, 'infected');
     if (!needsCare) continue;
     if (w.stock.medicine < 1) continue;
     if (index.has('treat', c.id)) continue;

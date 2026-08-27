@@ -8,6 +8,7 @@ import {
   type World,
 } from '../core/types';
 import { ANIMALS, ANIMAL_MAP } from '../data/animals';
+import { EFFECT_MAP } from '../data/effects';
 import { buildingDef } from '../data/buildings';
 import { daylight, hourOfDay } from '../sim/time';
 import { buildingCenterX, buildingCenterY, idx } from '../sim/world';
@@ -75,6 +76,8 @@ export class Renderer {
   private lightCanvas: HTMLCanvasElement | null = null;
   private dpr = 1;
   time = 0;
+  /** 0..1 wind strength, driven by the weather. */
+  private windGust = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -137,6 +140,9 @@ export class Renderer {
 
   render(w: World, cam: Camera, fx: Fx, opts: RenderOptions, dtReal: number) {
     this.time += dtReal;
+    const targetWind =
+      w.weather.kind === 'rain' ? 1.6 * w.weather.intensity : w.weather.kind === 'fog' ? 0.2 : 0.5;
+    this.windGust += (targetWind - this.windGust) * Math.min(1, dtReal * 0.8);
     const g = this.g;
     const cssW = this.canvas.width / this.dpr;
     const cssH = this.canvas.height / this.dpr;
@@ -409,6 +415,11 @@ export class Renderer {
       g.globalAlpha = Math.max(0, 1 - Math.max(0, p - 0.75) * 4);
     } else if (n.shake > 0) {
       g.rotate(Math.sin(this.time * 40) * 0.035 * n.shake);
+    } else if (n.kind === 'tree' || n.kind === 'pine') {
+      // A slow wind through the canopy, offset per tree so the forest is not
+      // one synchronised mass.
+      const phase = n.tx * 0.7 + n.ty * 0.4;
+      g.rotate(Math.sin(this.time * 0.9 + phase) * 0.012 * (1 + this.windGust));
     }
     // ground shadow
     g.fillStyle = 'rgba(0,0,0,0.18)';
@@ -515,6 +526,18 @@ export class Renderer {
       return;
     }
 
+    // Footfall dust, on the step frames only.
+    if (c.moving) {
+      const step = Math.floor(c.animT) % 4;
+      if (step === 1 || step === 3) {
+        const puff = (Math.sin(c.animT * Math.PI) + 1) * 0.5;
+        g.fillStyle = `rgba(150,132,104,${0.16 * puff})`;
+        g.beginPath();
+        g.ellipse(c.x - 3, c.y + 3, 4 + puff * 2, 1.6, 0, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+
     // shadow
     g.fillStyle = 'rgba(0,0,0,0.24)';
     g.beginPath();
@@ -541,7 +564,10 @@ export class Renderer {
     } else if (c.moving) {
       frame = Math.floor(c.animT) % 4;
     } else {
-      frame = 0;
+      // Standing still: mostly frame 0, with an occasional blink on frame 2.
+      // The per-character offset stops the camp blinking in unison.
+      const t = this.time * 0.6 + c.id * 1.7;
+      frame = t % 1 > 0.94 ? 2 : 0;
     }
 
     const sleeping = c.state === 'sleeping';
@@ -594,6 +620,15 @@ export class Renderer {
       g.beginPath();
       g.arc(c.x, c.y - CHAR_H - 4, 3, 0, Math.PI * 2);
       g.fill();
+    }
+
+    // A small marker for the status effect that matters most right now.
+    const marker = worstMarker(c);
+    if (marker && !sleeping) {
+      g.font = '9px sans-serif';
+      g.textAlign = 'center';
+      g.fillText(marker, c.x + 9, c.y - CHAR_H - 1 + Math.sin(this.time * 2 + c.id) * 0.8);
+      g.textAlign = 'left';
     }
   }
 
@@ -793,13 +828,24 @@ export class Renderer {
       g.strokeStyle = `rgba(180,205,235,${0.28 * w.weather.intensity})`;
       g.lineWidth = 1;
       const t = this.time;
-      for (let i = 0; i < 140; i++) {
+      for (let i = 0; i < 160; i++) {
         const seed = i * 97.13;
         const x = ((seed * 7.3 + t * 260) % (cssW + 60)) - 30;
         const y = ((seed * 13.7 + t * 700) % (cssH + 60)) - 30;
         g.beginPath();
         g.moveTo(x, y);
         g.lineTo(x - 3, y + 12);
+        g.stroke();
+      }
+      // Splashes where it lands.
+      g.strokeStyle = `rgba(200,220,240,${0.18 * w.weather.intensity})`;
+      for (let i = 0; i < 26; i++) {
+        const seed = i * 53.7;
+        const x = (seed * 31.1) % cssW;
+        const y = (seed * 17.9) % cssH;
+        const p = ((t * 2 + i * 0.37) % 1);
+        g.beginPath();
+        g.ellipse(x, y, 2 + p * 5, 1 + p * 2, 0, 0, Math.PI * 2);
         g.stroke();
       }
       g.restore();
@@ -852,11 +898,25 @@ export class Renderer {
   }
 }
 
+/** The single most important status marker to show above a survivor. */
+function worstMarker(c: Character): string | null {
+  let best: { marker: string; rank: number } | null = null;
+  for (const e of c.effects) {
+    const def = EFFECT_MAP[e.id];
+    if (!def?.marker) continue;
+    const rank = def.tone === 'bad' ? 2 + e.severity : 1;
+    if (!best || rank > best.rank) best = { marker: def.marker, rank };
+  }
+  return best?.marker ?? null;
+}
+
 const CARRY_COLORS: Record<string, string> = {
   wood: '#a9793f',
   stone: '#8e8e97',
   food: '#e2b455',
   rawFood: '#c25f5f',
+  rawMeat: '#a8443f',
+  cookedMeat: '#c98a4a',
   water: '#5aa9d6',
   fiber: '#c3c07a',
   medicine: '#7fd6a4',

@@ -3,6 +3,7 @@ import { clamp } from '../core/util';
 import { addResource, log, roll, rollPick, rollRange } from './world';
 import { toughness } from './modifiers';
 import { GEAR_SLOTS, gearStockKey } from '../data/gear';
+import { applyEffect, hasEffect } from './effects';
 import { grieve } from './relationships';
 import { say } from './dialogue';
 import type { Fx } from './fx';
@@ -51,8 +52,9 @@ export function injure(
   c.injuries.push(inj);
   const damage = 8 + sev * 42;
   c.health -= damage;
-  c.stress += 12 * sev;
   c.morale -= 8 * sev;
+  // A serious wound left alone can turn.
+  if (sev > 0.45) applyEffect(w, c, 'inPain', -1, sev);
   fx.burst(c.x, c.y - 10, 6, '#c0392b', 'spark', 30, 0.6, 2);
   fx.float(c.x, c.y - 28, `-${Math.round(damage)}`, '#ff7a6a');
   say(w, c, 'hurt', true);
@@ -67,11 +69,12 @@ export function injure(
   return inj;
 }
 
+/** Illness is a fever that runs its course — or does not, without medicine. */
 export function makeSick(w: World, c: Character, severity: number, cause: string) {
   if (!c.alive) return;
-  c.sickness = clamp(c.sickness + severity, 0, 1);
+  applyEffect(w, c, 'fever', 18 + severity * 30, clamp(severity, 0.2, 1));
   c.morale -= 6;
-  log(w, 'bad', 'Illness', `${c.name} has fallen ill — ${cause}.`, [c.id]);
+  log(w, 'bad', 'Illness', `${c.name} has come down with a fever — ${cause}.`, [c.id]);
 }
 
 export function kill(w: World, c: Character, cause: string, fx: Fx) {
@@ -117,7 +120,8 @@ export function checkMortality(w: World, fx: Fx) {
     if (c.health <= 0) {
       let cause = 'untreated injuries';
       if (c.hunger >= 100) cause = 'starvation';
-      else if (c.sickness > 0.6) cause = 'illness';
+      else if (hasEffect(c, 'fever')) cause = 'fever';
+      else if (hasEffect(c, 'infected')) cause = 'an infected wound';
       else if (c.energy <= 0) cause = 'exhaustion';
       kill(w, c, cause, fx);
       continue;
@@ -128,15 +132,25 @@ export function checkMortality(w: World, fx: Fx) {
     } else if (c.state === 'downed' && c.health > c.maxHealth * 0.3) {
       c.state = 'idle';
     }
-    // Chronic hunger and filth occasionally turn into illness.
-    if (c.sickness <= 0 && c.hunger > 85 && roll(w) < 0.004) {
+    // Chronic hunger, soaking rain and untreated wounds all invite worse.
+    if (!hasEffect(c, 'fever') && c.hunger > 85 && roll(w) < 0.004) {
       makeSick(w, c, rollRange(w, 0.2, 0.45), 'weakened by hunger');
+    }
+    if (!hasEffect(c, 'fever') && hasEffect(c, 'soaked') && roll(w) < 0.003) {
+      makeSick(w, c, rollRange(w, 0.15, 0.35), 'chilled to the bone');
+    }
+    const bad = c.injuries.find((i) => !i.treated && i.severity > 0.4);
+    if (bad && !hasEffect(c, 'infected') && roll(w) < 0.006) {
+      applyEffect(w, c, 'infected', -1, bad.severity);
+      log(w, 'bad', 'Infection', `${c.name}'s ${bad.label.toLowerCase()} has turned septic.`, [
+        c.id,
+      ]);
     }
   }
 }
 
 export function injurySummary(c: Character): string {
-  if (!c.injuries.length) return c.sickness > 0.05 ? 'Ill' : 'Healthy';
+  if (!c.injuries.length) return hasEffect(c, 'fever') ? 'Feverish' : 'Healthy';
   const worst = c.injuries.reduce((a, b) => (a.severity > b.severity ? a : b));
   return `${worst.label} (${worst.bodyPart})${worst.treated ? ' — treated' : ''}`;
 }

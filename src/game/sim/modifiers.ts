@@ -3,6 +3,7 @@ import { WORK_SKILL } from '../core/types';
 import { TRAIT_MAP, type TraitDef } from '../data/traits';
 import { clamp } from '../core/util';
 import { GEAR_MAP, GEAR_SLOTS } from '../data/gear';
+import { effectMultiplier } from './effects';
 
 /**
  * Every derived number the simulation uses comes from here, so a trait or a
@@ -94,13 +95,12 @@ export function skillLevel(c: Character, s: SkillId): number {
   return c.skills[s]?.level ?? 0;
 }
 
-/** 0..1 penalty from untreated injuries and illness. */
+/** 0..1 penalty from untreated injuries. Illness is a status effect. */
 export function impairment(c: Character): number {
   let p = 0;
   for (const inj of c.injuries) {
     p += inj.severity * (inj.treated ? 0.35 : 1) * 0.45;
   }
-  p += c.sickness * 0.5;
   return clamp(p, 0, 0.85);
 }
 
@@ -115,7 +115,9 @@ export function moveSpeed(c: Character, world: World): number {
   const hungry = c.hunger > 85 ? 0.8 : 1;
   const load = c.carrying ? 1 - Math.min(0.28, c.carrying.amount / (carryCapacity(c) * 4)) : 1;
   const hurt = 1 - impairment(c) * 0.55;
-  return base * tired * hungry * load * Math.max(0.25, hurt);
+  return (
+    base * tired * hungry * load * Math.max(0.25, hurt) * effectMultiplier(c, 'moveSpeed')
+  );
 }
 
 export function carryCapacity(c: Character): number {
@@ -164,22 +166,14 @@ export function workSpeed(c: Character, work: WorkType): number {
   }
 
   const moraleTerm = 0.75 + (c.morale / 100) * 0.4;
-  const stressTerm = 1 - (c.stress / 100) * 0.35;
-  const energyTerm = c.energy < 20 ? 0.6 : c.energy < 40 ? 0.85 : 1;
-  const hungerTerm = c.hunger > 90 ? 0.65 : c.hunger > 70 ? 0.88 : 1;
   const hurtTerm = 1 - impairment(c) * 0.6;
   const toolTerm = gearWorkSpeed(c);
+  // Hunger, tiredness and illness now come through status effects, so they
+  // are applied once, here, rather than being counted twice.
+  const effectTerm = effectMultiplier(c, 'workSpeed');
 
   return (
-    statTerm *
-    skillTerm *
-    m *
-    moraleTerm *
-    stressTerm *
-    energyTerm *
-    hungerTerm *
-    toolTerm *
-    Math.max(0.2, hurtTerm)
+    statTerm * skillTerm * m * moraleTerm * toolTerm * effectTerm * Math.max(0.2, hurtTerm)
   );
 }
 
@@ -191,15 +185,28 @@ export function yieldMultiplier(c: Character, work: WorkType): number {
 }
 
 export function learnRate(c: Character): number {
-  return traitMul(c, 'learnRate') * (1 + (c.stats.intelligence - 5) * 0.04);
+  return (
+    traitMul(c, 'learnRate') *
+    effectMultiplier(c, 'learnRate') *
+    (1 + (c.stats.intelligence - 5) * 0.04)
+  );
 }
 
 export function fatigueRate(c: Character): number {
   return traitMul(c, 'fatigue') * (1 - (c.stats.endurance - 5) * 0.03);
 }
 
-export function stressRate(c: Character): number {
-  return traitMul(c, 'stressGain') * gearStress(c) * (1 - (c.stats.endurance - 5) * 0.015);
+/**
+ * How hard a survivor takes bad conditions. Scales the morale drain from
+ * negative status effects, so a calm person weathers a bad week better.
+ */
+export function hardship(c: Character): number {
+  return traitMul(c, 'hardship') * gearStress(c) * (1 - (c.stats.endurance - 5) * 0.015);
+}
+
+/** Multiplier on the chance of an accident while working. */
+export function accidentRisk(c: Character): number {
+  return effectMultiplier(c, 'accident');
 }
 
 export function socialFactor(c: Character): number {
@@ -211,7 +218,12 @@ export function courageFactor(c: Character): number {
 }
 
 export function toughness(c: Character): number {
-  return traitMul(c, 'toughness') * gearProtection(c) * (1 - (c.stats.endurance - 5) * 0.03);
+  return (
+    traitMul(c, 'toughness') *
+    gearProtection(c) *
+    effectMultiplier(c, 'vulnerability') *
+    (1 - (c.stats.endurance - 5) * 0.03)
+  );
 }
 
 export function fortune(c: Character): number {
@@ -251,11 +263,10 @@ export function xpForLevel(level: number): number {
 /** Combined 0..1 wellbeing used for morale drift and UI mood faces. */
 export function wellbeing(c: Character): number {
   return clamp(
-    (c.morale / 100) * 0.4 +
-      (1 - c.stress / 100) * 0.2 +
+    (c.morale / 100) * 0.5 +
       (1 - c.hunger / 100) * 0.2 +
-      (c.energy / 100) * 0.1 +
-      (c.health / c.maxHealth) * 0.1,
+      (c.energy / 100) * 0.15 +
+      (c.health / c.maxHealth) * 0.15,
     0,
     1
   );

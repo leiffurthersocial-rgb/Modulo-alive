@@ -2,6 +2,7 @@ import {
   TILE,
   type Building,
   type Character,
+  type ResourceType,
   type World,
 } from '../core/types';
 import type { PathFinder } from '../core/pathfinding';
@@ -21,6 +22,7 @@ import {
   rollInt,
   takeResource,
   tileBlocked,
+  totalFood,
   tileToWorldX,
   tileToWorldY,
 } from './world';
@@ -169,7 +171,7 @@ function think(w: World, c: Character, ctx: Ctx) {
   }
 
   /* -------- 7. social / decompress -------- */
-  if ((c.stress > 45 || c.morale < 45 || roll(w) < 0.25) && !night) {
+  if ((c.morale < 52 || roll(w) < 0.25) && !night) {
     const partner = findSocialPartner(w, c);
     if (partner) {
       c.activity = 'social';
@@ -430,8 +432,16 @@ function actStore(w: World, c: Character, dt: number, ctx: Ctx) {
 /* -------- eating -------- */
 
 function foodAvailable(w: World) {
-  return w.stock.food > 0 || w.stock.rawFood > 0;
+  return totalFood(w) > 0;
 }
+
+/** Best first: a cooked meal beats raw scraps by a wide margin. */
+const MEAL_ORDER: { res: ResourceType; quality: number; raw: boolean }[] = [
+  { res: 'cookedMeat', quality: 1.15, raw: false },
+  { res: 'food', quality: 1, raw: false },
+  { res: 'rawMeat', quality: 0.5, raw: true },
+  { res: 'rawFood', quality: 0.6, raw: true },
+];
 
 function mealTime(hour: number) {
   return (hour > 7 && hour < 9) || (hour > 12 && hour < 14) || (hour > 18 && hour < 20);
@@ -463,13 +473,18 @@ function actEat(w: World, c: Character, dt: number, ctx: Ctx) {
   if (c.activityT > 0) return;
 
   const portion = Math.max(3, Math.round(6 * appetite(c)));
-  let ate = takeResource(w, 'food', portion);
+  let ate = 0;
   let quality = 1;
-  if (ate <= 0) {
-    ate = takeResource(w, 'rawFood', portion);
-    quality = 0.55;
-    if (ate > 0 && roll(w) < 0.06) makeSick(w, c, 0.25, 'ate something raw');
+  let ateRaw = false;
+  for (const option of MEAL_ORDER) {
+    ate = takeResource(w, option.res, portion);
+    if (ate > 0) {
+      quality = option.quality;
+      ateRaw = option.raw;
+      break;
+    }
   }
+  if (ateRaw && ate > 0 && roll(w) < 0.08) makeSick(w, c, 0.25, 'ate raw food');
   if (ate <= 0) {
     say(w, c, 'noFood', true);
     c.morale -= 4;
@@ -481,9 +496,8 @@ function actEat(w: World, c: Character, dt: number, ctx: Ctx) {
   c.hunger = Math.max(0, c.hunger - relief);
   const drank = takeResource(w, 'water', 1);
   c.morale += 3 * quality + (drank > 0 ? 1 : -1);
-  c.stress -= 3;
   c.lastMealAt = w.time.t;
-  ctx.fx.float(c.x, c.y - 24, quality > 0.8 ? 'a hot meal' : 'raw food', '#ffd88a');
+  ctx.fx.float(c.x, c.y - 24, ateRaw ? 'raw food' : 'a hot meal', '#ffd88a');
   c.activity = 'idle';
   c.thinkT = 0;
 }
@@ -815,8 +829,7 @@ function actExplore(w: World, c: Character, dt: number, ctx: Ctx) {
     return;
   }
   moveToward(w, c, home.tx, home.ty, dt, ctx, () => {
-    // Genuinely lost — they take damage and try again next tick.
-    c.stress += 6;
+    // Genuinely lost — they tire and try again next tick.
     c.energy -= 2;
   });
 }

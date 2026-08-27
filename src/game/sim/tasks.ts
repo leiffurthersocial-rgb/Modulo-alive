@@ -26,10 +26,18 @@ import {
   tileToWorldX,
   tileToWorldY,
 } from './world';
-import { addXp, carryCapacity, workSpeed, yieldMultiplier } from './modifiers';
+import {
+  accidentRisk,
+  addXp,
+  carryCapacity,
+  workSpeed,
+  yieldMultiplier,
+} from './modifiers';
+import { injure } from './medical';
 import { recipeAt } from './jobs';
 import { GEAR_MAP, GEAR_SLOTS } from '../data/gear';
 import { animalDef, findAnimal, killAnimal } from './wildlife';
+import { applyEffect, getEffect, removeEffect } from './effects';
 import type { Fx } from './fx';
 import { say } from './dialogue';
 import { adjustRelationship } from './relationships';
@@ -95,6 +103,7 @@ export function performWork(
   fx: Fx
 ): WorkResult {
   wearGear(w, c, dt, fx);
+  workAccident(w, c, dt, fx);
   const speed = workSpeed(c, j.work);
   const total = jobWorkAmount(w, j);
   const units = speed * dt * 2.2;
@@ -293,7 +302,7 @@ export function performWork(
     case 'cook': {
       const b = w.buildings.get(j.targetId);
       if (!b || b.state !== 'built') return 'fail';
-      if (w.stock.rawFood < 3) return 'fail';
+      if (w.stock.rawFood < 3 && w.stock.rawMeat < 3) return 'fail';
       j.progress += units / total;
       b.activeT = 0.4;
       addXp(c, 'cooking', dt * 1.5);
@@ -301,15 +310,24 @@ export function performWork(
         fx.burst((b.tx + b.w / 2) * TILE, (b.ty + b.h / 2) * TILE - 6, 1, '#d8d0c0', 'dust', 10, 1.2, 3);
       if (j.progress >= 1) {
         const def = buildingDef(b.def);
-        const raw = takeResource(w, 'rawFood', 10);
+        // Meat first — it spoils faster and feeds better once cooked.
+        const useMeat = w.stock.rawMeat >= 4;
+        const inRes: ResourceType = useMeat ? 'rawMeat' : 'rawFood';
+        const outRes: ResourceType = useMeat ? 'cookedMeat' : 'food';
+        const raw = takeResource(w, inRes, 10);
         // Water makes the meal go further; without it the cook does what they can.
         const water = takeResource(w, 'water', 2);
         const quality =
           (def.cooking ?? 1) * yieldMultiplier(c, 'cooking') * (water >= 2 ? 1.25 : 0.85);
         const meals = Math.max(1, Math.round(raw * 0.9 * quality));
-        addResource(w, 'food', meals);
+        addResource(w, outRes, meals);
         w.stats.mealsCooked += meals;
-        fx.float((b.tx + b.w / 2) * TILE, b.ty * TILE, `+${meals} food`, '#ffd88a');
+        fx.float(
+          (b.tx + b.w / 2) * TILE,
+          b.ty * TILE,
+          `+${meals} ${useMeat ? 'cooked meat' : 'meals'}`,
+          '#ffd88a'
+        );
         addXp(c, 'cooking', 10);
         say(w, c, 'cooking');
         return 'done';
@@ -369,7 +387,7 @@ export function performWork(
         const mult = yieldMultiplier(c, 'hunting');
         for (const res of Object.keys(def.yields) as ResourceType[]) {
           const amount = Math.max(1, Math.round((def.yields[res] ?? 0) * mult));
-          if (res === 'rawFood') pickUp(w, c, res, amount, fx);
+          if (res === 'rawMeat') pickUp(w, c, res, amount, fx);
           else addResource(w, res, amount);
         }
         addXp(c, 'combat', 16);
@@ -413,7 +431,14 @@ export function performWork(
           inj.remaining *= Math.max(0.25, 1 - power * 0.45);
           treatedAny = true;
         }
-        if (patient.sickness > 0) patient.sickness = Math.max(0, patient.sickness - power * 0.4);
+        // Medicine breaks a fever and cleans out an infection.
+        const fever = getEffect(patient, 'fever');
+        if (fever) {
+          fever.severity = Math.max(0, fever.severity - power * 0.5);
+          if (fever.severity <= 0.1) removeEffect(patient, 'fever');
+        }
+        removeEffect(patient, 'infected');
+        applyEffect(w, patient, 'recovering', 8);
         patient.health = Math.min(patient.maxHealth, patient.health + 6 * power);
         patient.morale += 6;
         adjustRelationship(w, c, patient, 6, 'was treated by');
@@ -435,6 +460,18 @@ export function performWork(
 }
 
 /** Food first: the fields only turn to fiber and medicine once the larder is safe. */
+/**
+ * Exhausted, sleep-deprived and feverish people hurt themselves at work.
+ * This is the sharp end of the status-effect system.
+ */
+function workAccident(w: World, c: Character, dt: number, fx: Fx) {
+  const risk = accidentRisk(c);
+  if (risk <= 1.01) return;
+  const chance = dt * 0.00016 * (risk - 1);
+  if (Math.random() > chance) return;
+  injure(w, c, null, 0.15 + Math.random() * 0.3, 'a moment of carelessness', fx);
+}
+
 /**
  * Gear wears out with use. Tools go first, clothing lasts much longer — but
  * everything eventually needs replacing, which keeps the workbench useful.

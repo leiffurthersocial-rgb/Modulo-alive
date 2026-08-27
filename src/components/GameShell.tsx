@@ -12,6 +12,7 @@ import EventLog from './EventLog';
 import Objectives from './Objectives';
 import Minimap from './Minimap';
 import Notices from './Notices';
+import Inventory from './Inventory';
 import MainMenu from './MainMenu';
 import { useEngine } from '@/store/engineStore';
 
@@ -20,6 +21,7 @@ export default function GameShell() {
   const [started, setStarted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [buildOpen, setBuildOpen] = useState(false);
+  const [invOpen, setInvOpen] = useState(false);
   const [rightTab, setRightTab] = useState<'log' | 'goals'>('log');
   const [compact, setCompact] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(true);
@@ -60,6 +62,7 @@ export default function GameShell() {
       }
       if (e.key.toLowerCase() === 'b') setBuildOpen((b) => !b);
       if (e.key.toLowerCase() === 'p') setMenuOpen((m) => !m);
+      if (e.key.toLowerCase() === 'i') setInvOpen((v) => !v);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -231,6 +234,12 @@ export default function GameShell() {
               </aside>
             )}
 
+            {invOpen && (
+              <div className="hud-inventory">
+                <Inventory onClose={() => setInvOpen(false)} />
+              </div>
+            )}
+
             <div className="hud-dock">
               {(toolActive || engine.orderMode) && (
                 <div className="tool-banner">
@@ -251,7 +260,12 @@ export default function GameShell() {
                   </button>
                 </div>
               )}
-              <Toolbar buildOpen={buildOpen} onToggleBuild={() => setBuildOpen((b) => !b)} />
+              <Toolbar
+                buildOpen={buildOpen}
+                onToggleBuild={() => setBuildOpen((b) => !b)}
+                invOpen={invOpen}
+                onToggleInventory={() => setInvOpen((v) => !v)}
+              />
             </div>
           </div>
         </>

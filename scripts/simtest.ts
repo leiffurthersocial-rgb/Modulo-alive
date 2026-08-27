@@ -214,7 +214,6 @@ for (const c of world.characters) {
       `hun ${String(Math.round(c.hunger)).padStart(3)} ` +
       `en ${String(Math.round(c.energy)).padStart(3)} ` +
       `mor ${String(Math.round(c.morale)).padStart(3)} ` +
-      `str ${String(Math.round(c.stress)).padStart(3)} ` +
       `[${c.activity}] traits: ${c.traits.join(', ')}`
   );
 }
